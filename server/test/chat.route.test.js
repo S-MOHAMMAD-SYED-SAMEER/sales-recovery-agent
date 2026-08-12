@@ -212,3 +212,78 @@ test('memory keeps working across multiple turns that mix tool and non-tool ques
     ['user', 'assistant', 'user', 'assistant', 'user', 'assistant']
   );
 });
+
+// --- M4: RAG knowledge-base search, alongside M3's business tools ---
+
+test('a shipping-policy question surfaces searchKnowledgeBase in toolsUsed', async () => {
+  const store = freshStore();
+  const result = await handleChat(
+    { sessionId: 's1', message: 'Do you ship internationally?' },
+    { conversationStore: store, generateReply: stubReply('Yes, we ship to most countries.', ['searchKnowledgeBase']) }
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.toolsUsed, ['searchKnowledgeBase']);
+});
+
+test('an unsupported knowledge question is answered honestly instead of fabricated, and still logged as a tool attempt', async () => {
+  const store = freshStore();
+  // Emulates a real model that called searchKnowledgeBase, got found:false
+  // back, and — per the system prompt's instruction — admitted it doesn't
+  // know rather than inventing a policy.
+  const result = await handleChat(
+    { sessionId: 's1', message: 'Do you price-match other stores?' },
+    {
+      conversationStore: store,
+      generateReply: stubReply(
+        "I'm not sure — that's not something I have information on. I'd recommend contacting support directly.",
+        ['searchKnowledgeBase']
+      ),
+    }
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.toolsUsed, ['searchKnowledgeBase']);
+  assert.match(result.body.reply, /not sure|don't have|do not have/i);
+});
+
+test('a RAG-using turn does not corrupt conversation memory with retrieval artifacts', async () => {
+  const store = freshStore();
+  await handleChat(
+    { sessionId: 's1', message: 'What is your return policy?' },
+    { conversationStore: store, generateReply: stubReply('You can return items within 30 days.', ['searchKnowledgeBase']) }
+  );
+
+  const history = store.getHistory('s1');
+  assert.deepEqual(history, [
+    { role: 'user', content: 'What is your return policy?' },
+    { role: 'assistant', content: 'You can return items within 30 days.' },
+  ]);
+  for (const turn of history) {
+    assert.deepEqual(Object.keys(turn).sort(), ['content', 'role']);
+  }
+});
+
+test('RAG and business tools coexist correctly within one session, and memory stays isolated across sessions', async () => {
+  const storeX = freshStore();
+  const replies = [
+    stubReply('We ship internationally in 7-12 days.', ['searchKnowledgeBase']),
+    stubReply('Order 1001 has shipped.', ['getOrderStatus']),
+  ];
+  let call = 0;
+  const generateReply = async (args) => replies[call++](args);
+
+  await handleChat({ sessionId: 'session-x', message: 'Do you ship internationally?' }, { conversationStore: storeX, generateReply });
+  await handleChat({ sessionId: 'session-x', message: 'And where is order 1001?' }, { conversationStore: storeX, generateReply });
+  await handleChat(
+    { sessionId: 'session-y', message: 'Hi' },
+    { conversationStore: storeX, generateReply: stubReply('Hello!', []) }
+  );
+
+  const historyX = storeX.getHistory('session-x');
+  const historyY = storeX.getHistory('session-y');
+
+  assert.equal(historyX.length, 4);
+  assert.equal(historyY.length, 2);
+  assert.equal(historyY[0].content, 'Hi');
+});

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "ingest": "node scripts/ingest.js"
   },
   "engines": {
     "node": ">=22.5.0"
@@ -14,6 +15,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
     "@google/genai": "^1.0.0",
+    "@huggingface/transformers": "^4.2.0",
+    "chromadb": "^3.5.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.0"
   }

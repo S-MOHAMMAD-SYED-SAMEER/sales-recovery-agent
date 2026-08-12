@@ -5,17 +5,20 @@ for a fictional small international D2C store. Architecture is locked per
 [project-brief_3.md](../project-brief_3.md) and [CLAUDE.md](../CLAUDE.md) — see the approved
 architecture proposal for the full design and milestone sequence.
 
-## Status: M3 — business tool calling
+## Status: M4 — RAG knowledge base
 
-`/api/chat` can now decide it needs real business data — order status, stock, discount validity —
-call a deterministic mock tool for it, and use the result in its answer. No RAG, proactive
-signals, or guardrails yet.
+`/api/chat` now has a real persistent knowledge base (shipping/returns/product/FAQ policy
+documents) it can search and ground answers in, alongside M3's business tools. No proactive
+signals or guardrails yet.
 
 ## Structure
 
 ```
-server/    Node + Express backend
-web/       Minimal static demo chat page (not embedded in the portfolio)
+server/       Node + Express backend
+  data/kb/    Knowledge-base source documents (markdown)
+  data/chroma/  Local Chroma server data (gitignored, dev-only)
+  scripts/ingest.js   Run the RAG ingestion pipeline
+web/          Minimal static demo chat page (not embedded in the portfolio)
 ```
 
 ## LLM provider
@@ -158,12 +161,104 @@ tool-call/tool-result exchange lives entirely inside that one `generateReply()` 
 reaches `conversationStore`. Confirmed live: after a tool-using turn, the stored conversation row
 is a plain `{ role, content }` pair, same shape as any other turn.
 
+## RAG knowledge base (M4)
+
+**Vector store choice: Chroma, run locally via `chroma run`.** The brief locks RAG to Chroma or
+Qdrant. Both ship a JS client that talks HTTP to a running server — there's no pure-JS embedded
+mode for either, so *some* local server process is unavoidable either way. This machine has no
+Docker (the usual way to self-host either one), so the deciding factor was: what can actually be
+stood up locally, reliably, right now, for free? Chroma's Python package (`pip install chromadb`,
+already have Python) includes a bundled `chroma` CLI with a one-line local dev server
+(`chroma run --path <dir>`) — no Docker, no separate account, no cost. Qdrant's only realistic
+no-Docker local option would have meant downloading and trusting an unsigned binary from GitHub
+releases, which is both more fragile and a worse security posture for a dev setup. Qdrant Cloud's
+free tier (considered for M1's original RAG sketch) was ruled back out here because the task
+explicitly scopes this to *local* development, not a hosted dependency. This is a local-dev
+decision, not a production one — a real deployment's vector-store hosting is an open question for
+later, not solved now.
+
+**Document ingestion & chunking** (`server/src/rag/chunker.js`, `ingest.js`). Source documents are
+real markdown files in `data/kb/`: `shipping-policy.md`, `returns-policy.md`, `product-info.md`,
+`faq.md` — covering shipping, international shipping, delivery times, returns/refunds, product
+care, and general FAQs, for the same fictional store the M3 tools use (its mock orders/stock
+reference the same products: Ceramic Mug, Linen Tote Bag, Wool Scarf, Travel Candle). The chunker
+splits each document on `##` headings — each chunk is prefixed with `Title > Heading` (e.g.
+"Shipping Policy > International Shipping") so it carries its own topic even read in isolation,
+which is exactly how retrieval presents it later. A section longer than ~800 characters is further
+split by paragraph with a small trailing overlap carried into the next piece, so a fact sitting
+right at a split boundary isn't stranded without context. Content before a document's first `##`
+heading becomes its own "Overview" chunk rather than being silently dropped.
+
+Ingestion (`npm run ingest`) reads every `data/kb/*.md` file, chunks it, embeds each chunk, and
+`upsert`s it into Chroma using a **deterministic id** (`filename::chunkIndex`) — re-running
+ingestion replaces existing chunks rather than duplicating them. Before re-adding a file's chunks,
+ingestion first deletes any existing chunks for that source file (`deleteBySource`), so if a
+document shrinks (fewer sections than last time), the old extra chunks don't linger as stale
+orphans — upsert-by-id alone only prevents duplicates, not that kind of drift. Verified live: ran
+`npm run ingest` twice in a row against the real server — 22 chunks both times, no growth.
+
+**Embeddings** (`server/src/rag/embeddings.js`): local, in-process, via `@huggingface/transformers`
+running `Xenova/all-MiniLM-L6-v2` — no external API, no API key, no per-call cost. Same reasoning
+as M1's original architecture proposal: a knowledge base this size doesn't need a paid embeddings
+vendor, and this avoids adding a second paid account for a quality difference that wouldn't be
+visible at this scale. (Note: `@huggingface/transformers` is the actively-maintained successor to
+the older `@xenova/transformers` package, which stopped publishing in mid-2024 — checked npm
+publish dates before choosing.) Model weights (~90MB) download once from the Hugging Face Hub on
+first use and are cached locally after that.
+
+**Retrieval** (`server/src/rag/retriever.js`): `retrieve(query, options) -> results[]`. Embeds the
+query, queries the vector store for the top-k (default 3) nearest chunks by cosine similarity, and
+filters out anything below a relevance threshold (default 0.35) — a match is not "sort of
+relevant," it's either presented to the model or not. Each result carries `{ source, heading, text,
+score }` — full source attribution, not just raw text. **This threshold was tuned against real
+queries, not guessed:** on this dataset, genuinely relevant matches scored 0.57-0.79, a clearly
+unrelated query ("what is the capital of France?") scored 0.07-0.08, and even a plausible-sounding
+but actually-irrelevant query ("do you sell airplane tickets?") scored only 0.25-0.29 — all safely
+excluded by the 0.35 cutoff.
+
+**Integration: RAG as a fourth tool, not a separate pre-fetch step.** `searchKnowledgeBase`
+(`server/src/rag/searchKnowledgeBaseTool.js`) is registered as a tool with the exact same shape as
+the M3 business tools (`name`, `description`, `parameters`, `execute`) and flows through the
+identical `runToolLoop()` built in M3 — `server/src/llm/index.js` is the one place that combines
+`tools/index.js`'s business tools with the RAG tool into one list, so neither module needs to know
+the other exists. This directly implements the requested flow — *model decides if it needs
+knowledge, model decides if it needs live business data* — through one existing mechanism instead
+of building a second, parallel "always retrieve before calling the model" pipeline. **RAG and
+tools still serve different purposes**, just through the same calling convention: RAG answers
+"what does our policy say" from stable reference documents; tools answer "what's true right now"
+for one specific order/product/code from live (mock) business data.
+
+**No fabrication.** When `searchKnowledgeBase` finds nothing above the relevance threshold, it
+returns `{ found: false, message: "...Do not guess or invent a policy — tell the customer honestly
+that you do not have this information." }` — the instruction travels back through the tool result
+itself, not just the system prompt, so it's present exactly when it matters. The system prompt
+additionally states the same rule up front. Verified live: asking about price-matching (not in the
+KB) produced "I'm sorry, I don't have information on whether we price-match other stores" — no
+invented policy.
+
+| Example question | Routes to | Verified live |
+|---|---|---|
+| "How long does international shipping take?" | `searchKnowledgeBase` | ✅ correct, cited shipping policy |
+| "Can I return something after 30 days?" | `searchKnowledgeBase` | ✅ correctly said no |
+| "How should I wash the wool scarf?" | `searchKnowledgeBase` | ✅ correct care instructions |
+| "Do you price-match other stores?" | `searchKnowledgeBase` | ✅ honest "I don't have that info," no fabrication |
+| "What's the status of order 1001?" | `getOrderStatus` (M3, unchanged) | ✅ still routes correctly, not to RAG |
+| "Is the Ceramic Mug in stock?" | `checkStock` (M3, unchanged) | ✅ still routes correctly, not to RAG |
+
 ## Local development
 
+Two local services are needed now: the Node app, and a local Chroma server for RAG.
+
 ```
+# one-time: install the Chroma CLI (Python) and this project's Node deps
+pip install chromadb
 cd sales-recovery-agent/server
 npm install
 cp .env.example .env      # then fill in GEMINI_API_KEY (or ANTHROPIC_API_KEY + LLM_PROVIDER=anthropic)
+
+# each session: start Chroma, ingest the knowledge base, start the app
+chroma run --path ./data/chroma --port 8000     # separate terminal, leave running
+npm run ingest                                   # re-run any time data/kb/*.md changes
 npm run dev
 ```
 
@@ -182,30 +277,49 @@ cd sales-recovery-agent/server
 npm test
 ```
 
-Runs on Node's built-in test runner (`node --test`) against an in-memory SQLite database and
-stubbed LLM/tool calls — no real API key or network access needed. 39 tests across four files:
+Runs on Node's built-in test runner (`node --test`) against an in-memory SQLite database, a fake
+vector store, and stubbed LLM/tool calls — **no real API key, no running Chroma server, and no
+network access needed.** 63 tests across seven files:
 
-- `test/conversationStore.test.js` — memory repository: creating/reusing a conversation, saving
-  and retrieving messages in chronological order, session isolation, limit handling.
-- `test/tools.test.js` — each real tool's mock data, input validation, unknown-tool handling, and
-  the dispatcher's generic failure wrapping.
-- `test/toolLoop.test.js` — the shared agent loop's mechanics: no-tool passthrough, single and
-  multi-round tool execution, `toolsUsed` accounting, graceful handling of a failed tool outcome,
-  and the max-iterations guard.
-- `test/chat.route.test.js` — the route's contract: input validation, history passed to
-  `generateReply`, `toolsUsed` surfaced correctly, memory isolation between sessions, memory
-  staying clean across mixed tool/non-tool turns, and graceful degradation on LLM or store
-  failures.
+- `test/conversationStore.test.js` — memory repository (unchanged since M2).
+- `test/tools.test.js` — the three M3 business tools' mock data, validation, and failure handling.
+- `test/toolLoop.test.js` — the shared agent loop's mechanics (unchanged since M3).
+- `test/chunker.test.js` — heading-based splitting, the "Overview" preamble fix, long-section
+  splitting with overlap, empty-document handling.
+- `test/rag.ingest.test.js` — deterministic chunk ids, idempotent re-ingestion (unchanged file →
+  no duplicates), stale-chunk cleanup (shrunk file → old extra chunks removed), correct per-file
+  source attribution — all against a fake vector store that records what it was called with.
+- `test/rag.retriever.test.js` — relevance-threshold filtering (the offline proxy for "irrelevant
+  content is excluded" — see note below), source/heading metadata preservation, `topK` handling.
+- `test/rag.searchKnowledgeBaseTool.test.js` — the tool wrapper's found/not-found shapes and input
+  validation.
+- `test/chat.route.test.js` — the route's contract, now including: a policy question surfacing
+  `searchKnowledgeBase` in `toolsUsed`, an unsupported-knowledge question answered honestly, RAG
+  turns not corrupting memory, and RAG/business tools coexisting correctly within one session.
 
-A note on what these tests do and don't prove: the "does an order question actually make Gemini
-call `getOrderStatus`" question is real *model* judgment, not our code — asserting on that in an
-offline unit test would be flaky and would test Gemini, not this codebase. The automated tests
-instead use stubs that emulate a model having already decided to call a tool, to verify the
-surrounding plumbing (contract, `toolsUsed` reporting, memory hygiene) deterministically. Whether
-the real model actually chooses correctly is confirmed separately, live, against the real Gemini
-adapter — see the M3 verification notes above.
+A note on what these tests do and don't prove: whether a real question actually makes Gemini call
+the *right* tool — `getOrderStatus` vs. `searchKnowledgeBase` vs. neither — is real model judgment,
+not our code, so asserting on it in an offline unit test would be flaky and would test Gemini, not
+this codebase. Same logic for real embedding-based relevance ranking. The automated suite instead
+uses stubs/fakes to verify the surrounding plumbing deterministically (contract shapes, threshold
+filtering logic, `toolsUsed` reporting, memory hygiene, idempotency). Whether the real model routes
+correctly and whether real embeddings actually separate relevant from irrelevant content is
+confirmed separately, live, against the real Chroma server, the real embedding model, and the real
+Gemini adapter — see the M4 verification table above and the M3 notes for the tool-routing side.
 
-## Next milestone (M4)
+## Environment variables (M4 additions)
 
-RAG: knowledge-base documents (shipping/returns/FAQ), chunking, embeddings, vector storage and
-retrieval. Not started.
+```
+CHROMA_HOST=localhost        # optional, this is the default
+CHROMA_PORT=8000              # optional, this is the default
+CHROMA_COLLECTION=sales_recovery_kb   # optional, this is the default
+KB_DIR=                       # optional, defaults to server/data/kb
+```
+
+None of these are required to be set — they only need overriding if you run Chroma on a different
+host/port. No new secret/API key was introduced by M4 (Chroma and the embedding model are both
+local, no account needed).
+
+## Next milestone (M5)
+
+Proactive-signal detection and guardrails. Not started.

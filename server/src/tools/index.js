@@ -5,6 +5,11 @@ import { ToolValidationError } from './errors.js';
 
 const TOOLS = [getOrderStatus, checkStock, checkDiscount];
 
+// Exported so llm/index.js can combine these with the RAG knowledge-search
+// tool into one combined tool list for the agent loop, without this module
+// needing to know that RAG exists.
+export { TOOLS as businessTools };
+
 export function getToolDefinitions(toolList = TOOLS) {
   return toolList.map(({ name, description, parameters }) => ({ name, description, parameters }));
 }

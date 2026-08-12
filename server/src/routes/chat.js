@@ -5,15 +5,19 @@ import { conversationStore as defaultConversationStore } from '../memory/index.j
 
 const router = Router();
 
-// M3: business tool calling added. Still no RAG, proactive signals, or guardrails yet.
+// M4: RAG knowledge-base search added alongside M3's business tools. Still
+// no proactive signals or guardrails yet.
 const SYSTEM_PROMPT =
   'You are a helpful customer support assistant for a small online store. ' +
   'Keep answers brief and honest. If you are not sure about something, say so. ' +
-  'You have tools to look up real order status, product stock, and discount code validity. ' +
-  'Only call a tool when the customer is asking about one of those specific things and you ' +
-  'need real data to answer accurately — never call a tool for greetings, small talk, or ' +
-  'anything you can already answer from the conversation. Never invent order, stock, or ' +
-  'discount information yourself; if a tool reports something was not found, say so honestly.';
+  'You have tools to look up real order status, product stock, discount code validity, and to ' +
+  'search the store\'s knowledge base (shipping policy, returns/refunds, product info, FAQ). ' +
+  'Only call a tool when the customer is asking about one of those specific things and you need ' +
+  'real information to answer accurately — never call a tool for greetings, small talk, or ' +
+  'anything you can already answer from the conversation. ' +
+  'Never invent order, stock, or discount information, and never state a store policy or product ' +
+  'detail unless it came from the knowledge-base search results — if the search finds nothing ' +
+  'relevant, or a tool reports something was not found, say so honestly instead of guessing.';
 
 // Core turn logic, separated from the Express route so it can be unit-tested
 // with an injected in-memory store and a stub LLM call — no real DB file,
