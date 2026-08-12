@@ -443,6 +443,53 @@ Open http://localhost:3000 — the server serves `web/index.html` as a static fi
 Without the active provider's API key set, `/api/chat` returns a `500` with a clear message
 instead of crashing the server.
 
+## Portfolio Demo Deployment
+
+**Not deployed yet** — this documents the planned setup so it's ready when deployment happens; see
+[DEPLOYMENT.md](./DEPLOYMENT.md) for the step-by-step checklist. Recommended architecture, chosen in
+a deployment feasibility audit that specifically prioritized zero/low cost, minimal code changes,
+and preserving M1–M7 behavior unchanged:
+
+- **App (frontend + API, same process)** → a Render free Web Service. The existing `npm start`
+  (`node src/index.js`) is already the correct start command — no code changes needed. Render's
+  free tier is a genuine persistent-process host (unlike Vercel's serverless functions, which time
+  out at 10s on the Hobby plan — too short for a RAG/tool-calling turn — so the backend stays off
+  Vercel; only the portfolio itself stays there).
+- **Chroma (RAG vector store)** → a second, separate Render free Web Service running the official
+  `chromadb/chroma` Docker image. Only `CHROMA_HOST`/`CHROMA_PORT` change — same client code as
+  local dev.
+- **Gemini** → unchanged, still the existing Google AI Studio API key, just set as a Render
+  environment variable instead of a local `.env` file. **Never in a file, never in Git, never in
+  chat/logs.**
+
+**Required environment variables** (set in Render's dashboard UI, not committed anywhere):
+```
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=<set in Render's dashboard>
+GEMINI_MODEL=gemini-3.5-flash-lite
+CHROMA_HOST=<the Chroma Render service's hostname>
+CHROMA_PORT=<its port>
+CHROMA_COLLECTION=sales_recovery_kb
+```
+`PORT`, `SQLITE_PATH`, and `KB_DIR` don't need to be set — Render injects `PORT` automatically, and
+the other two already default correctly relative to the deployed code.
+
+**Ingestion**: `npm run ingest` still needs to run once against the deployed Chroma instance to
+populate the knowledge base — it can be run from a local machine with `CHROMA_HOST`/`CHROMA_PORT`
+pointed at the deployed Chroma service; the local embedding model already does the work, no new
+code needed.
+
+**SQLite persistence is demo-session-scoped, not durable**, on Render's free tier — the free tier
+doesn't include a persistent disk (that's a separate paid add-on), so conversation memory can be
+reset on redeploys/restarts. Acceptable for a portfolio demo (every visitor starts a fresh browser
+session anyway); not something to rely on for real customer data without upgrading later.
+
+**Free-tier cold starts**: Render free services spin down after 15 minutes idle and take about a
+minute to wake back up on the next request — worse case, both the app and the separate Chroma
+service could be asleep at once. **Before a live client call, open the demo URL and send one
+message a couple of minutes early** to warm both services up; don't rely on the first message
+during the actual call being fast.
+
 ## Tests
 
 ```

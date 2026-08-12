@@ -26,5 +26,5 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api', chatRouter);
 
 app.listen(config.port, () => {
-  console.log(`Sales-Recovery Agent server listening on http://localhost:${config.port}`);
+  console.log(`Server listening on port ${config.port}`);
 });
