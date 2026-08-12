@@ -7,7 +7,10 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "test": "node --test",
-    "ingest": "node scripts/ingest.js"
+    "ingest": "node scripts/ingest.js",
+    "eval": "node scripts/eval.js",
+    "eval:real": "node scripts/eval.js --real",
+    "eval:real:judge": "node scripts/eval.js --real --judge"
   },
   "engines": {
     "node": ">=22.5.0"
