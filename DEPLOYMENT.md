@@ -40,10 +40,22 @@ configuration.
    ```
    Leave `PORT`, `SQLITE_PATH`, `KB_DIR` unset — they default correctly.
 
-6. Create the second Render Web Service for Chroma:
-   - Deploy from the official `chromadb/chroma` Docker image (no custom code, no repo needed for
-     this one).
-   - Note the hostname/port Render assigns it.
+6. Create the second Render Web Service for Chroma, built from this repo's `sales-recovery-agent/chroma/Dockerfile`
+   (a one-line wrapper around the official `chromadb/chroma` image — see that file's comments):
+   - Environment: **Docker**
+   - Repository: same GitHub repo as the main app
+   - Root Directory: `sales-recovery-agent/chroma`
+   - Dockerfile Path: `sales-recovery-agent/chroma/Dockerfile` (if Render asks for it relative to
+     the repo root) or `Dockerfile` (if relative to the Root Directory you just set — Render's UI
+     has used both conventions at different times; use whichever the field's own placeholder/hint
+     implies)
+   - Port: `8000` (matches Chroma's own default and the app's `CHROMA_PORT` default — no mismatch
+     to reconcile)
+   - No environment variables are required for basic operation.
+   - No persistent Disk needed for a demo (see "Notes" below on what that trades away) — leave
+     storage as the service's default ephemeral filesystem unless you specifically want durable
+     vector storage across restarts.
+   - Note the hostname Render assigns this service (`CHROMA_HOST`) and confirm the port (`CHROMA_PORT=8000`).
 
 7. Go back to step 5's service and fill in `CHROMA_HOST`/`CHROMA_PORT` with the values from step 6,
    then redeploy service #1 so the env vars take effect.
@@ -81,6 +93,13 @@ wakes everything up.
 
 - SQLite conversation memory is demo-session-scoped on Render's free tier (no persistent disk on
   free — that's a paid add-on). Acceptable for a demo; not durable storage.
+- Chroma's data lives at `/data` inside its container (that's the upstream image's own default —
+  nothing in this repo's Dockerfile changes it). Same story as SQLite: on Render's free tier
+  without a paid persistent Disk, that's the container's ephemeral filesystem, so the ingested
+  knowledge base can be lost on a redeploy/restart. Re-running `npm run ingest` (step 8) restores
+  it in seconds since the KB source files are tiny and committed to the repo — this is not lossy
+  in any way that matters for a demo. If durable Chroma storage across restarts is ever wanted,
+  attach a Render Disk mounted at `/data` on the Chroma service (paid feature).
 - Gemini's free-tier quota is 15 requests/minute regardless of hosting — space out messages during
   a demo the same way you would locally.
 - Nothing about this deployment changes the provider abstraction, RAG, tools, memory schema,

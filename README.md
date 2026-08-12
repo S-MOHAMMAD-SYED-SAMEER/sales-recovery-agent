@@ -455,9 +455,11 @@ and preserving M1–M7 behavior unchanged:
   free tier is a genuine persistent-process host (unlike Vercel's serverless functions, which time
   out at 10s on the Hobby plan — too short for a RAG/tool-calling turn — so the backend stays off
   Vercel; only the portfolio itself stays there).
-- **Chroma (RAG vector store)** → a second, separate Render free Web Service running the official
-  `chromadb/chroma` Docker image. Only `CHROMA_HOST`/`CHROMA_PORT` change — same client code as
-  local dev.
+- **Chroma (RAG vector store)** → a second, separate Render free Web Service, built from
+  [`chroma/Dockerfile`](./chroma/Dockerfile) — a one-line wrapper around the official
+  `chromadb/chroma` image, checked into this repo so Render's Docker build has something to point
+  at (root directory `sales-recovery-agent/chroma`, port `8000`). Only `CHROMA_HOST`/`CHROMA_PORT`
+  change on the app side — same client code as local dev, no application changes.
 - **Gemini** → unchanged, still the existing Google AI Studio API key, just set as a Render
   environment variable instead of a local `.env` file. **Never in a file, never in Git, never in
   chat/logs.**
@@ -483,6 +485,12 @@ code needed.
 doesn't include a persistent disk (that's a separate paid add-on), so conversation memory can be
 reset on redeploys/restarts. Acceptable for a portfolio demo (every visitor starts a fresh browser
 session anyway); not something to rely on for real customer data without upgrading later.
+
+**Chroma's data has the same caveat**, for the same reason — it writes to `/data` inside its
+container (the upstream image's own default), which is ephemeral without a paid Render Disk
+attached. Unlike conversation memory, this is trivially recoverable: re-running `npm run ingest`
+rebuilds the whole (tiny, 4-document) knowledge base in seconds from files already committed to
+the repo.
 
 **Free-tier cold starts**: Render free services spin down after 15 minutes idle and take about a
 minute to wake back up on the next request — worse case, both the app and the separate Chroma
