@@ -5,10 +5,15 @@ import { conversationStore as defaultConversationStore } from '../memory/index.j
 
 const router = Router();
 
-// M2: SQLite conversation memory. No RAG context, no tools, no signals/guardrails yet.
+// M3: business tool calling added. Still no RAG, proactive signals, or guardrails yet.
 const SYSTEM_PROMPT =
   'You are a helpful customer support assistant for a small online store. ' +
-  'Keep answers brief and honest. If you are not sure about something, say so.';
+  'Keep answers brief and honest. If you are not sure about something, say so. ' +
+  'You have tools to look up real order status, product stock, and discount code validity. ' +
+  'Only call a tool when the customer is asking about one of those specific things and you ' +
+  'need real data to answer accurately — never call a tool for greetings, small talk, or ' +
+  'anything you can already answer from the conversation. Never invent order, stock, or ' +
+  'discount information yourself; if a tool reports something was not found, say so honestly.';
 
 // Core turn logic, separated from the Express route so it can be unit-tested
 // with an injected in-memory store and a stub LLM call — no real DB file,
@@ -40,27 +45,33 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     console.error('[chat] Failed to load conversation history:', err.message);
   }
 
-  let reply;
+  let text;
+  let toolsUsed;
   try {
-    reply = await generateReply({
+    const result = await generateReply({
       systemPrompt: SYSTEM_PROMPT,
       messages: [...history, { role: 'user', content: message }],
     });
+    text = result.text;
+    toolsUsed = result.toolsUsed || [];
   } catch (err) {
     console.error('[chat] LLM provider error:', err);
     return { status: 502, body: { error: 'Failed to get a response from the assistant. Please try again.' } };
   }
 
-  // Same graceful-degradation rule for the write side: a persistence failure
-  // shouldn't stop the user from getting the reply they already paid for.
+  // Only the plain user/assistant text is persisted — the tool-call/tool-result
+  // exchange that may have happened inside generateReply() is internal to that
+  // one turn and never enters conversation memory. Same graceful-degradation
+  // rule as the read side: a persistence failure shouldn't stop the user from
+  // getting the reply they already paid for.
   try {
     conversationStore.saveMessage(sessionId, 'user', message);
-    conversationStore.saveMessage(sessionId, 'assistant', reply);
+    conversationStore.saveMessage(sessionId, 'assistant', text);
   } catch (err) {
     console.error('[chat] Failed to persist conversation history:', err.message);
   }
 
-  return { status: 200, body: { reply, toolsUsed: [], signals: null } };
+  return { status: 200, body: { reply: text, toolsUsed, signals: null } };
 }
 
 router.post('/chat', async (req, res) => {

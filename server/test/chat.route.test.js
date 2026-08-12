@@ -8,11 +8,24 @@ function freshStore() {
   return createConversationStore(createDb(':memory:'));
 }
 
+// These stubs stand in for generateReply() (the llm/index.js contract:
+// { text, toolsUsed }). They deliberately hardcode "if the message looks
+// like an order/stock/discount question, report that tool as used" to
+// emulate what a real model+tool-loop would decide — this tests the
+// chat-route <-> generateReply <-> memory plumbing (contract, toolsUsed
+// reporting, memory isolation) deterministically and offline. Whether the
+// *real* model actually chooses to call the right tool is verified
+// separately, live, against the real Gemini adapter (not something a unit
+// test should assert on, since that's real LLM judgment, not our code).
+function stubReply(text, toolsUsed = []) {
+  return async () => ({ text, toolsUsed });
+}
+
 test('rejects a request with an empty message', async () => {
   const store = freshStore();
   const result = await handleChat(
     { sessionId: 's1', message: '  ' },
-    { conversationStore: store, generateReply: async () => 'unused' }
+    { conversationStore: store, generateReply: stubReply('unused') }
   );
   assert.equal(result.status, 400);
 });
@@ -21,7 +34,7 @@ test('rejects a request with no sessionId', async () => {
   const store = freshStore();
   const result = await handleChat(
     { sessionId: '', message: 'hi' },
-    { conversationStore: store, generateReply: async () => 'unused' }
+    { conversationStore: store, generateReply: stubReply('unused') }
   );
   assert.equal(result.status, 400);
 });
@@ -34,7 +47,7 @@ test('passes prior conversation history to generateReply and persists the new tu
   let receivedMessages;
   const stubGenerateReply = async ({ messages }) => {
     receivedMessages = messages;
-    return 'stub reply';
+    return { text: 'stub reply', toolsUsed: [] };
   };
 
   const result = await handleChat(
@@ -60,10 +73,9 @@ test('passes prior conversation history to generateReply and persists the new tu
 
 test('two sessions calling /api/chat do not see each other\'s history', async () => {
   const store = freshStore();
-  const stubGenerateReply = async () => 'ok';
 
-  await handleChat({ sessionId: 'session-x', message: 'hi from X' }, { conversationStore: store, generateReply: stubGenerateReply });
-  await handleChat({ sessionId: 'session-y', message: 'hi from Y' }, { conversationStore: store, generateReply: stubGenerateReply });
+  await handleChat({ sessionId: 'session-x', message: 'hi from X' }, { conversationStore: store, generateReply: stubReply('ok') });
+  await handleChat({ sessionId: 'session-y', message: 'hi from Y' }, { conversationStore: store, generateReply: stubReply('ok') });
 
   const historyX = store.getHistory('session-x');
   const historyY = store.getHistory('session-y');
@@ -107,7 +119,7 @@ test('degrades gracefully and still answers when the conversation store fails', 
       conversationStore: brokenStore,
       generateReply: async ({ messages }) => {
         receivedMessages = messages;
-        return 'ok reply';
+        return { text: 'ok reply', toolsUsed: [] };
       },
     }
   );
@@ -115,4 +127,88 @@ test('degrades gracefully and still answers when the conversation store fails', 
   assert.equal(result.status, 200);
   assert.equal(result.body.reply, 'ok reply');
   assert.deepEqual(receivedMessages, [{ role: 'user', content: 'hello' }]);
+});
+
+test('a normal question that needs no tool reports an empty toolsUsed', async () => {
+  const store = freshStore();
+  const result = await handleChat(
+    { sessionId: 's1', message: 'What are your store hours?' },
+    { conversationStore: store, generateReply: stubReply('We are open 9-5.', []) }
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.toolsUsed, []);
+});
+
+test('an order-status question surfaces getOrderStatus in toolsUsed', async () => {
+  const store = freshStore();
+  const result = await handleChat(
+    { sessionId: 's1', message: 'Where is my order 1001?' },
+    { conversationStore: store, generateReply: stubReply('Your order has shipped.', ['getOrderStatus']) }
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.toolsUsed, ['getOrderStatus']);
+});
+
+test('a stock question surfaces checkStock in toolsUsed', async () => {
+  const store = freshStore();
+  const result = await handleChat(
+    { sessionId: 's1', message: 'Is the Ceramic Mug in stock?' },
+    { conversationStore: store, generateReply: stubReply('Yes, 42 in stock.', ['checkStock']) }
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.toolsUsed, ['checkStock']);
+});
+
+test('a discount question surfaces checkDiscount in toolsUsed', async () => {
+  const store = freshStore();
+  const result = await handleChat(
+    { sessionId: 's1', message: 'Is WELCOME10 still valid?' },
+    { conversationStore: store, generateReply: stubReply('Yes, 10% off.', ['checkDiscount']) }
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.toolsUsed, ['checkDiscount']);
+});
+
+test('a tool-using turn does not corrupt conversation memory with tool artifacts', async () => {
+  const store = freshStore();
+  await handleChat(
+    { sessionId: 's1', message: 'Where is my order 1001?' },
+    { conversationStore: store, generateReply: stubReply('Your order has shipped.', ['getOrderStatus']) }
+  );
+
+  const history = store.getHistory('s1');
+  assert.deepEqual(history, [
+    { role: 'user', content: 'Where is my order 1001?' },
+    { role: 'assistant', content: 'Your order has shipped.' },
+  ]);
+  // Only plain {role, content} pairs — no tool_use/tool_result/functionCall shapes leaked in.
+  for (const turn of history) {
+    assert.deepEqual(Object.keys(turn).sort(), ['content', 'role']);
+  }
+});
+
+test('memory keeps working across multiple turns that mix tool and non-tool questions', async () => {
+  const store = freshStore();
+  const replies = [
+    stubReply('Sure, happy to help!', []),
+    stubReply('Your order has shipped.', ['getOrderStatus']),
+    stubReply('Yes, 42 in stock.', ['checkStock']),
+  ];
+  let call = 0;
+  const generateReply = async (args) => replies[call++](args);
+
+  await handleChat({ sessionId: 's1', message: 'Hi there' }, { conversationStore: store, generateReply });
+  await handleChat({ sessionId: 's1', message: 'Where is my order 1001?' }, { conversationStore: store, generateReply });
+  await handleChat({ sessionId: 's1', message: 'Is the mug in stock?' }, { conversationStore: store, generateReply });
+
+  const history = store.getHistory('s1');
+  assert.equal(history.length, 6);
+  assert.deepEqual(
+    history.map((m) => m.role),
+    ['user', 'assistant', 'user', 'assistant', 'user', 'assistant']
+  );
 });
