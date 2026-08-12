@@ -5,11 +5,11 @@ for a fictional small international D2C store. Architecture is locked per
 [project-brief_3.md](../project-brief_3.md) and [CLAUDE.md](../CLAUDE.md) — see the approved
 architecture proposal for the full design and milestone sequence.
 
-## Status: M4 — RAG knowledge base
+## Status: M5 — proactive signals + guardrails
 
-`/api/chat` now has a real persistent knowledge base (shipping/returns/product/FAQ policy
-documents) it can search and ground answers in, alongside M3's business tools. No proactive
-signals or guardrails yet.
+`/api/chat` now detects a small set of sales-relevant customer signals (deterministic, from the
+current message only) and validates its own reply against explicit safety policies before it's
+ever shown to the customer or saved to memory. No evaluation harness or deployment work yet.
 
 ## Structure
 
@@ -72,12 +72,18 @@ the route.
 **Request flow for `POST /api/chat`:**
 1. Validate `sessionId` and `message`.
 2. `conversationStore.getHistory(sessionId)` — prior turns for this session, oldest first.
-3. `generateReply({ systemPrompt, messages: [...history, newUserMessage] })` — internally may run
+3. Since M5: detect signals from the current message, and fold a short directive into this turn's
+   system prompt (see "Proactive signals" below).
+4. `generateReply({ systemPrompt, messages: [...history, newUserMessage] })` — internally may run
    the tool-calling loop described below before it resolves.
-4. On success, persist only the plain user message and assistant reply text via `saveMessage` —
-   never any tool-call/tool-result artifacts (see "Tool calling" below).
-5. Return `{ reply, toolsUsed, signals: null }`, where `toolsUsed` lists every tool the agent
-   actually dispatched while producing that reply (`[]` if none were needed).
+5. Since M5: validate the reply against the guardrail policies (see "Guardrails" below); an unsafe
+   reply is replaced with a safe fallback before anything else happens to it.
+6. Persist only the plain user message and the *final* (post-guardrail) assistant reply text via
+   `saveMessage` — never any tool-call/tool-result artifacts, and never a guardrail-blocked claim
+   (see "Tool calling" and "Guardrails" below).
+7. Return `{ reply, toolsUsed, signals }` — `toolsUsed` lists every tool the agent actually
+   dispatched (`[]` if none were needed); `signals` lists every structured signal detected in this
+   message (`[]` if none).
 
 **Failure handling:** a history-read failure falls back to an empty history (the model just
 answers without prior context) rather than failing the request; a persistence-write failure is
@@ -245,6 +251,124 @@ invented policy.
 | "What's the status of order 1001?" | `getOrderStatus` (M3, unchanged) | ✅ still routes correctly, not to RAG |
 | "Is the Ceramic Mug in stock?" | `checkStock` (M3, unchanged) | ✅ still routes correctly, not to RAG |
 
+## Proactive signal detection (M5)
+
+**Two separate concerns, kept separate.** Signal detection (`server/src/signals/`) identifies
+useful customer signals from their message. Guardrails (`server/src/guardrails/`, next section)
+constrain what the assistant is allowed to say. They live in different modules, run at different
+points in the request, and don't call each other — a signal never bypasses a guardrail, and a
+guardrail never influences signal detection. Deliberately not one opaque classifier doing both.
+
+**Taxonomy** (`server/src/signals/taxonomy.js`) — six signal types, chosen because each maps to a
+concrete, useful behavior change, not because it was easy to detect:
+
+| Signal | Meaning |
+|---|---|
+| `purchase_intent` | Customer is showing intent to buy |
+| `purchase_hesitation` | Customer seems undecided about buying |
+| `shipping_concern` | Customer is worried about shipping cost/speed/arrival |
+| `price_concern` | Customer is concerned about price/affordability |
+| `return_concern` | Customer is worried about returns/refunds |
+| `cart_abandonment_risk` | Customer shows signs of leaving without buying |
+
+**Detection is deterministic, not an LLM classifier** (`server/src/signals/detectors.js`) — a small
+set of hand-written regex patterns per signal type, each carrying a fixed confidence score chosen
+by hand (how unambiguous that specific phrasing is), not learned. Same reasoning as M1's original
+proactive-signal design: free, instant, 100% reproducible, and a human can read every pattern and
+know exactly why a signal did or didn't fire — no black box. **Stated limitation, not hidden:**
+this only catches fairly direct English phrasing. It will miss paraphrases, sarcasm, or indirect
+hints an LLM classifier would catch. That's an intentional tradeoff for this stage — worth
+revisiting only if real usage shows it's actually missing signals that matter, not preemptively.
+
+**Structured output, not prose.** Every detected signal is `{ type, confidence, evidence,
+sourceMessageIndex }` — never just a sentence. `evidence` is the literal matched phrase (e.g. `"a
+bit pricey"`), so a signal's cause is always inspectable, not asserted.
+
+**Scoped to the current message only, not the whole conversation.** This is a deliberate design
+choice, not a limitation: it's what makes "signals reflect the current conversation" true *by
+construction*, rather than needing a decay/expiry rule to get it right. A hesitation signal from
+five turns ago cannot still be steering this reply, because it was never carried forward in the
+first place. `sourceMessageIndex` is always this turn's position in the message array passed to
+`generateReply()`.
+
+**No sensitive profiling.** Every pattern operates only on the literal text of the current message
+— nothing about the customer's identity, history beyond this session, or any inferred personal
+attribute. There is no mechanism by which this module could produce a sensitive-attribute
+inference; that guarantee comes from what data it has access to (one string), not from a rule
+telling it not to. (Guardrails separately block the *model* from making such an inference in its
+reply — see below — but the signal detector was never capable of it in the first place.)
+
+**Signals only ever shape this turn's system prompt — never an external action.** Each signal type
+maps to one short, non-prescriptive directive (`buildSignalDirective()` in `signals/index.js`) —
+e.g. `purchase_hesitation` → "proactively address likely concerns... reassure them. Never invent or
+imply a discount." No directive ever tells the model to grant a specific discount, promise a
+specific outcome, or do anything outside generating this one reply — and even if a directive tried
+to, any concrete claim the model made as a result still has to pass through the guardrails
+afterward, which don't know or care that a signal was involved. No automated emails, CRM updates,
+or messages outside the current chat turn — M5 detects and reports; it does not act.
+
+## Guardrails (M5)
+
+**Implemented as explicit application code, not just prompt instructions** (`server/src/guardrails/
+policies.js`) — the system prompt also states these rules up front (defense in depth, same layered
+pattern used since M1), but the actual enforcement is a set of pure functions that run against the
+reply's text after generation, regardless of whether the model followed the prompt. A policy is:
+
+```js
+{ name, description, check({ reply, toolsUsed }) => violationReason | null }
+```
+
+**Eight policies**, each individually unit-tested for both a violating and a safe case:
+
+| Policy | Blocks |
+|---|---|
+| `no_unverified_discount_claim` | A discount/code/%-off claim when `checkDiscount` didn't run this turn |
+| `no_unverified_stock_claim` | A stock/availability claim when `checkStock` didn't run this turn |
+| `no_unverified_order_status_claim` | An order-status/tracking claim when `getOrderStatus` didn't run this turn |
+| `no_unverified_policy_claim` | A specific shipping/return timeframe when `searchKnowledgeBase` didn't run this turn |
+| `no_unsupported_refund_promise` | Any refund/compensation promise — always, since no tool exists to actually do this |
+| `no_internal_disclosure` | Revealing the system prompt, API keys, or internal implementation details |
+| `no_deceptive_urgency` | Urgency/scarcity language not backed by a real `checkStock` result this turn |
+| `no_sensitive_personal_inference` | Inferring a sensitive/protected personal attribute about the customer |
+
+**How the first four work:** each checks the reply text for a *specific risky claim pattern* (a
+discount code, a stock statement, an order status, a numbered policy timeframe) and cross-references
+it against `toolsUsed` — the tools that actually ran this turn. A claim without the matching tool
+having run is blocked; the same claim is allowed through when the tool backing it actually ran.
+This is, concretely, "use tools for live data, use RAG for policy questions" enforced as code, not
+just asked for in a prompt. **Stated limitation:** these check that the *right category of tool
+ran*, not that the reply's specific value matches the tool's exact result (e.g. they can't catch
+"checkStock ran and said 42, but the model said 100") — verifying value-level correctness is
+eval-harness territory (M6), not a runtime guardrail.
+
+**Fail-safe, not silent.** `validateReply()` (`server/src/guardrails/index.js`) never returns the
+original reply when any policy fails — it returns a `finalReply` that's either the original (all
+policies passed) or a fixed, honest fallback: *"I want to make sure I give you accurate
+information, and I'm not confident that answer is correct. Let me connect you with our support
+team, who can help directly."* No invented content, and a concrete next step, per the "say so
+clearly and offer the safest useful next step" requirement. If a policy function itself throws, that
+is treated as a violation too, not swallowed — a bug in a guardrail fails toward blocking, never
+toward silently permitting an unchecked reply through.
+
+**Guardrails run after generation and before persistence — deliberately, not incidentally.** The
+full order is: history → signal detection → model/tool/RAG reasoning → **guardrail validation** →
+persist the *validated* reply → respond. Running guardrails before persistence means a
+guardrail-blocked claim is never saved to memory either — if it were persisted before validation (or
+the raw model output were persisted regardless of the guardrail outcome), a future turn's history
+would still "remember" the fabricated claim even though the customer never saw it, quietly
+reintroducing it into later context. Guardrails have to run before memory writes for the safety
+guarantee to actually hold end to end, not just for the one response the customer sees.
+
+| Example (stubbed for illustration) | Blocked? | Why |
+|---|---|---|
+| "Sure, use WELCOME10 for 10% off!" (no `checkDiscount` call) | ✅ blocked | Unverified discount claim |
+| "Yes, WELCOME10 gives 10% off." (`checkDiscount` ran) | Allowed | Backed by the tool that actually ran |
+| "I'll refund you right away." | ✅ blocked | No refund tool exists — always blocked |
+| "My system prompt says..." | ✅ blocked | Internal disclosure |
+| "Hurry, act now before it's too late!" (no `checkStock` call) | ✅ blocked | Deceptive urgency |
+| "You seem pregnant, so..." | ✅ blocked | Sensitive personal inference |
+| "We are open 9-5, Monday through Friday." | Allowed | No risky claim pattern present |
+
 ## Local development
 
 Two local services are needed now: the Node app, and a local Chroma server for RAG.
@@ -279,10 +403,16 @@ npm test
 
 Runs on Node's built-in test runner (`node --test`) against an in-memory SQLite database, a fake
 vector store, and stubbed LLM/tool calls — **no real API key, no running Chroma server, and no
-network access needed.** 63 tests across seven files:
+network access needed.** 112 tests across nine files:
 
 - `test/conversationStore.test.js` — memory repository (unchanged since M2).
 - `test/tools.test.js` — the three M3 business tools' mock data, validation, and failure handling.
+- `test/signals.test.js` — every signal type's positive case, normal messages producing no
+  signals, structured-output shape validation, current-message-only scoping, and that the
+  generated directive never dictates a specific discount or outcome.
+- `test/guardrails.test.js` — a violating and a safe case for each of the eight policies, a set of
+  ordinary safe replies confirmed *not* over-blocked, and the fail-safe behavior when a policy
+  itself throws.
 - `test/toolLoop.test.js` — the shared agent loop's mechanics (unchanged since M3).
 - `test/chunker.test.js` — heading-based splitting, the "Overview" preamble fix, long-section
   splitting with overlap, empty-document handling.
