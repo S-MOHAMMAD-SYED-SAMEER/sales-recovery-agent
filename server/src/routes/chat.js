@@ -1,39 +1,72 @@
 import { Router } from 'express';
 import { config, isConfigured } from '../config/env.js';
-import { generateReply } from '../llm/index.js';
+import { generateReply as defaultGenerateReply } from '../llm/index.js';
+import { conversationStore as defaultConversationStore } from '../memory/index.js';
 
 const router = Router();
 
-// M1 skeleton only: no RAG context, no tools, no persisted memory. Proves the
-// request/response wiring (client -> Express -> LLM provider -> client) end to end.
+// M2: SQLite conversation memory. No RAG context, no tools, no signals/guardrails yet.
 const SYSTEM_PROMPT =
   'You are a helpful customer support assistant for a small online store. ' +
   'Keep answers brief and honest. If you are not sure about something, say so.';
 
-router.post('/chat', async (req, res) => {
-  const { sessionId, message } = req.body || {};
+// Core turn logic, separated from the Express route so it can be unit-tested
+// with an injected in-memory store and a stub LLM call — no real DB file,
+// network call, or API key required to test it.
+export async function handleChat({ sessionId, message }, deps = {}) {
+  const generateReply = deps.generateReply || defaultGenerateReply;
+  const conversationStore = deps.conversationStore || defaultConversationStore;
+  const usingRealProvider = !deps.generateReply;
 
   if (!sessionId || typeof message !== 'string' || !message.trim()) {
-    return res.status(400).json({ error: 'sessionId and a non-empty message are required.' });
+    return { status: 400, body: { error: 'sessionId and a non-empty message are required.' } };
   }
 
-  if (!isConfigured) {
-    return res.status(500).json({
-      error: `Server is missing the API key for LLM_PROVIDER="${config.llmProvider}". Set it in sales-recovery-agent/server/.env.`,
-    });
+  if (usingRealProvider && !isConfigured) {
+    return {
+      status: 500,
+      body: {
+        error: `Server is missing the API key for LLM_PROVIDER="${config.llmProvider}". Set it in sales-recovery-agent/server/.env.`,
+      },
+    };
   }
 
+  // A history read failure degrades to "no history" rather than failing the
+  // request — memory is a continuity nice-to-have, not a hard dependency.
+  let history = [];
   try {
-    const reply = await generateReply({
-      systemPrompt: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: message }],
-    });
+    history = conversationStore.getHistory(sessionId);
+  } catch (err) {
+    console.error('[chat] Failed to load conversation history:', err.message);
+  }
 
-    res.json({ reply, toolsUsed: [], signals: null });
+  let reply;
+  try {
+    reply = await generateReply({
+      systemPrompt: SYSTEM_PROMPT,
+      messages: [...history, { role: 'user', content: message }],
+    });
   } catch (err) {
     console.error('[chat] LLM provider error:', err);
-    res.status(502).json({ error: 'Failed to get a response from the assistant. Please try again.' });
+    return { status: 502, body: { error: 'Failed to get a response from the assistant. Please try again.' } };
   }
+
+  // Same graceful-degradation rule for the write side: a persistence failure
+  // shouldn't stop the user from getting the reply they already paid for.
+  try {
+    conversationStore.saveMessage(sessionId, 'user', message);
+    conversationStore.saveMessage(sessionId, 'assistant', reply);
+  } catch (err) {
+    console.error('[chat] Failed to persist conversation history:', err.message);
+  }
+
+  return { status: 200, body: { reply, toolsUsed: [], signals: null } };
+}
+
+router.post('/chat', async (req, res) => {
+  const { sessionId, message } = req.body || {};
+  const result = await handleChat({ sessionId, message });
+  res.status(result.status).json(result.body);
 });
 
 export default router;

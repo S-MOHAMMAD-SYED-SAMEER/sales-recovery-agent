@@ -1,4 +1,9 @@
 import 'dotenv/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEFAULT_SQLITE_PATH = path.resolve(__dirname, '../../data/memory.sqlite');
 
 const VALID_PROVIDERS = ['gemini', 'anthropic'];
 const provider = (process.env.LLM_PROVIDER || 'gemini').trim().toLowerCase();
@@ -17,6 +22,7 @@ export const config = {
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  sqlitePath: process.env.SQLITE_PATH || DEFAULT_SQLITE_PATH,
 };
 
 export const isConfigured = VALID_PROVIDERS.includes(provider) && missing.length === 0;
