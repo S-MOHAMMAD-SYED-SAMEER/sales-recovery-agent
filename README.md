@@ -5,12 +5,57 @@ for a fictional small international D2C store. Architecture is locked per
 [project-brief_3.md](../project-brief_3.md) and [CLAUDE.md](../CLAUDE.md) — see the approved
 architecture proposal for the full design and milestone sequence.
 
-## Status: M6 — evaluation harness
+## Status: complete (M1–M7)
 
-The agent now has a repeatable, versioned evaluation suite (`npm run eval`) that measures whether
-it actually behaves correctly — tool selection, signal detection, groundedness, hallucination,
-guardrail safety — against 16 representative cases, instead of relying on manual demos. Polish and
-deployment (M7) not started.
+All seven build milestones are done: LLM provider abstraction, SQLite memory, business
+tool-calling, RAG, proactive signals + guardrails, an evaluation harness, and this finalization
+pass (demo UI, documentation, and an end-to-end audit). Locally runnable and tested; **not
+deployed**. See [PROJECT-1.md](./PROJECT-1.md) for the case-study write-up.
+
+## Overview
+
+**Problem this demo addresses:** small international D2C stores lose sales to slow or inconsistent
+support — an unanswered shipping question, an unclear return policy, or a customer who quietly
+abandons their cart while hesitating. This agent answers store-policy questions accurately, looks
+up real (here: mock) order/stock/discount data on request, remembers the conversation, notices a
+few sales-relevant signals in what the customer says, and is constrained so it can't fabricate the
+business-critical answers a support bot most needs to get right.
+
+**Two different kinds of "knowledge," on purpose:**
+
+| | RAG (`searchKnowledgeBase`) | Business tools |
+|---|---|---|
+| Answers | "What does our policy say?" | "What's true right now, for this specific order/product/code?" |
+| Source | Static documents (`data/kb/*.md`), embedded and searched | Mock functions standing in for a real store API |
+| Changes how often | Rarely (a policy update) | Every request (stock levels, order status) |
+
+Both are exposed to the model as ordinary tools through the same tool-calling loop — the model
+decides which one (if either) a given message actually needs; see "Guardrails" below for what stops
+it from answering either kind of question without evidence.
+
+**Request flow:**
+
+```mermaid
+flowchart TD
+    A[Customer message] --> B[Load conversation history<br/>SQLite]
+    B --> C[Detect signals<br/>current message only]
+    C --> D[Build system prompt<br/>base + signal directive]
+    D --> E[LLM reasoning]
+    E -->|needs live data| F[Business tools<br/>order / stock / discount]
+    E -->|needs policy/product info| G[RAG retrieval<br/>Chroma + local embeddings]
+    F --> E
+    G --> E
+    E --> H[Draft reply]
+    H --> I[Guardrail validation]
+    I -->|safe| J[Final reply]
+    I -->|unsafe| K[Safe fallback reply]
+    K --> J
+    J --> L[Persist user + final reply<br/>SQLite]
+    L --> M[Response to customer<br/>reply + toolsUsed + signals]
+```
+
+Full detail on each stage is in the milestone-by-milestone sections below; this section is the
+five-minute version.
 
 ## Structure
 
@@ -610,6 +655,29 @@ mock-mode regression suite is what stays perfectly reproducible).
   own (or a same-provider) output — it is a second opinion, explicitly not treated as truth anywhere
   in this codebase.
 
-## Next milestone (M7)
+## M7 — finalization (this pass)
 
-Portfolio polish and deployment. Not started.
+The build milestones (M1–M6) were architecture and functionality; M7 is the finalization pass —
+auditing the finished system against the brief, fixing what the audit found, and making the project
+genuinely demo- and portfolio-ready:
+
+- **Demo UI rebuilt** (`web/index.html`) — from the M1 wiring-check page into a real chat interface:
+  message bubbles, a live typing indicator, a clearly styled error state, a visible "New
+  conversation" control, example prompts, and a badge under each assistant reply showing which
+  tool(s)/knowledge source it actually used and which signal(s) were detected — all sourced directly
+  from the existing `{ reply, toolsUsed, signals }` response, nothing simulated or hardcoded client-side.
+- **Demo-data labeling** — the UI states plainly that orders/stock/discounts are fictional demo
+  data, not a real store, with example values to try.
+- **This README's Overview section and [PROJECT-1.md](./PROJECT-1.md)** — the concise, portfolio-facing
+  version of everything documented in depth below.
+- **One stale comment fixed** in `routes/chat.js` (referred to M5 as the latest milestone).
+- Everything else — the architecture, the request flow, the tests, the eval harness — was audited
+  and found already coherent with the brief; M7 intentionally made no other code changes, per its
+  own scope (finalize, don't redesign).
+
+## What's next (outside this project)
+
+Project 1 itself is done. Per the top-level roadmap (`CLAUDE.md`, `project-brief_3.md`): Projects 2
+(Inbox-to-CRM Agent) and 3 (Explainable ATS) are next, followed by client acquisition. Portfolio
+polish and any deployment of this project are tracked separately and were explicitly out of scope
+for M7.
