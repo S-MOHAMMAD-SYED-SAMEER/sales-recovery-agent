@@ -1,5 +1,5 @@
 import { ToolValidationError } from '../tools/errors.js';
-import { retriever as defaultRetriever } from './index.js';
+import { retriever as defaultRetriever, knowledgeBaseRestorer as defaultRestorer } from './index.js';
 
 // Registered as a tool (same shape as the M3 business tools: name,
 // description, parameters, execute) so it flows through the exact same
@@ -47,8 +47,9 @@ const UNAVAILABLE_MESSAGE =
   'couldn\'t access that store information right now. Please try again in a moment."';
 
 // Exported as a factory so tests can inject a fake retriever without a real
-// Chroma connection or embedding model.
-export function buildExecute(retriever) {
+// Chroma connection or embedding model. `restorer` is optional — omitted, the
+// tool behaves exactly as it did before demo-KB recovery existed.
+export function buildExecute(retriever, restorer) {
   return async function execute(args) {
     const query = args && args.query;
 
@@ -67,6 +68,27 @@ export function buildExecute(retriever) {
     let results;
     try {
       results = await retriever.retrieve(query);
+
+      // No matches has two very different causes: the knowledge base answered
+      // and genuinely holds nothing relevant, or it came back empty because
+      // the demo's store was wiped by a restart. Only the second is worth
+      // acting on, and the restorer tells them apart — on a populated store
+      // this is an in-memory boolean check costing nothing.
+      if (results.length === 0 && restorer) {
+        const outcome = await restorer.ensurePopulated();
+
+        if (outcome.restored) {
+          // Retry once, so the customer whose question triggered the restore
+          // still gets a properly grounded answer instead of being told to
+          // come back later. They see nothing of this.
+          results = await retriever.retrieve(query);
+        } else if (outcome.reason === 'failed') {
+          // Retrieval worked a moment ago but the store can't be read or
+          // written now — that is an outage, not an empty policy shelf, and
+          // must not be reported to the customer as "we have no such policy".
+          return { found: false, unavailable: true, message: UNAVAILABLE_MESSAGE };
+        }
+      }
     } catch (err) {
       console.error('[rag] Knowledge-base retrieval failed:', err.message);
       return { found: false, unavailable: true, message: UNAVAILABLE_MESSAGE };
@@ -93,4 +115,4 @@ export function buildExecute(retriever) {
   };
 }
 
-export const execute = buildExecute(defaultRetriever);
+export const execute = buildExecute(defaultRetriever, defaultRestorer);

@@ -178,6 +178,123 @@ test('an invalid query is still a validation error, not swallowed as a failure',
   await assert.rejects(() => execute({}), ToolValidationError);
 });
 
+// --- Demo knowledge-base recovery -----------------------------------------
+// Three outcomes must stay distinguishable: a populated store with nothing
+// relevant, an empty store that can be rebuilt, and a store that cannot be
+// reached at all. Conflating the first two is what made the live demo tell
+// visitors the store had no shipping policy.
+
+function makeRestorer(outcome) {
+  const state = { calls: 0 };
+  return {
+    state,
+    async ensurePopulated() {
+      state.calls += 1;
+      return outcome;
+    },
+  };
+}
+
+test('an empty knowledge base is restored and the same request still gets an answer', async () => {
+  const restored = [
+    { source: 'shipping-policy.md', heading: 'International', text: '7-12 business days.', score: 0.71 },
+  ];
+  let attempt = 0;
+  const retriever = {
+    // Empty on the first call (wiped store), populated after the restore.
+    retrieve: async () => (attempt++ === 0 ? [] : restored),
+  };
+  const restorer = makeRestorer({ restored: true, reason: 'restored', chunksIngested: 22 });
+
+  const result = await buildExecute(retriever, restorer)({ query: 'international shipping' });
+
+  // The customer whose question triggered the restore gets the grounded
+  // answer, not an apology — and nothing in the result mentions restoring.
+  assert.equal(result.found, true);
+  assert.equal(result.results[0].source, 'shipping-policy.md');
+  assert.equal(result.unavailable, undefined);
+  assert.ok(!JSON.stringify(result).toLowerCase().includes('restor'));
+  assert.equal(restorer.state.calls, 1);
+  assert.equal(attempt, 2, 'retrieval should be retried exactly once after a restore');
+});
+
+test('a populated store with nothing relevant still takes the not-found path', async () => {
+  const restorer = makeRestorer({ restored: false, reason: 'already-populated' });
+
+  const result = await buildExecute({ retrieve: async () => [] }, restorer)({
+    query: 'do you price-match',
+  });
+
+  // Unchanged behaviour: an honest "we do not have that information".
+  assert.equal(result.found, false);
+  assert.equal(result.unavailable, undefined);
+  assert.match(result.message, /do not guess/i);
+});
+
+test('a store that cannot be restored is reported as unavailable, not as missing information', async () => {
+  const restorer = makeRestorer({ restored: false, reason: 'failed' });
+
+  const result = await buildExecute({ retrieve: async () => [] }, restorer)({
+    query: 'return policy',
+  });
+
+  // Critical distinction: the store has a return policy. Saying otherwise
+  // because the vector store is down would be a false claim about the
+  // business, so this must surface as a temporary failure instead.
+  assert.equal(result.found, false);
+  assert.equal(result.unavailable, true);
+  assert.match(result.message, /temporary/i);
+  assertNoInfrastructureLeak(result);
+});
+
+test('a cooling-down restorer falls through to the normal not-found path', async () => {
+  const restorer = makeRestorer({ restored: false, reason: 'cooling-down' });
+
+  const result = await buildExecute({ retrieve: async () => [] }, restorer)({ query: 'returns' });
+
+  assert.equal(result.found, false);
+  assert.equal(result.unavailable, undefined);
+});
+
+test('a successful lookup never consults the restorer at all', async () => {
+  const restorer = makeRestorer({ restored: false, reason: 'already-populated' });
+  const retriever = {
+    retrieve: async () => [
+      { source: 'faq.md', heading: 'Payment', text: 'Cards accepted.', score: 0.6 },
+    ],
+  };
+
+  const result = await buildExecute(retriever, restorer)({ query: 'payment methods' });
+
+  assert.equal(result.found, true);
+  assert.equal(restorer.state.calls, 0, 'the healthy path must not change at all');
+});
+
+test('a thrown retrieval error still short-circuits to unavailable, before any restore', async () => {
+  const restorer = makeRestorer({ restored: true, reason: 'restored' });
+  const retriever = {
+    retrieve: async () => {
+      throw LEAKY_ERROR;
+    },
+  };
+
+  const result = await buildExecute(retriever, restorer)({ query: 'shipping' });
+
+  // Preserves a611a38 exactly: an outage is an outage, and recovery is not
+  // attempted on a store that just failed to answer.
+  assert.equal(result.unavailable, true);
+  assert.equal(restorer.state.calls, 0);
+  assertNoInfrastructureLeak(result);
+});
+
+test('the tool still works with no restorer supplied', async () => {
+  // Existing callers and tests construct the tool with a retriever alone.
+  const result = await buildExecute({ retrieve: async () => [] })({ query: 'anything' });
+
+  assert.equal(result.found, false);
+  assert.equal(result.unavailable, undefined);
+});
+
 test('guardrails still pass the unavailable reply through unchanged', async () => {
   const reply = "Sorry, I couldn't access that store information right now. Please try again in a moment.";
 
