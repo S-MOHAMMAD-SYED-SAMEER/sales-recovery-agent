@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { config, isConfigured } from '../config/env.js';
+import { isConfigured } from '../config/env.js';
 import { generateReply as defaultGenerateReply } from '../llm/index.js';
 import { conversationStore as defaultConversationStore } from '../memory/index.js';
 import { detectSignals, buildSignalDirective } from '../signals/index.js';
@@ -47,11 +47,15 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     return { status: 400, body: { error: 'sessionId and a non-empty message are required.' } };
   }
 
+  // Deliberately says nothing about which provider, which variable, or where
+  // it lives — this string reaches whoever is using the demo. The operator-
+  // facing detail (exact provider and missing variable names) is already
+  // logged at startup by config/env.js, which is where it belongs.
   if (usingRealProvider && !isConfigured) {
     return {
       status: 500,
       body: {
-        error: `Server is missing the API key for LLM_PROVIDER="${config.llmProvider}". Set it in sales-recovery-agent/server/.env.`,
+        error: 'The assistant is temporarily unavailable. Please try again later.',
       },
     };
   }
@@ -82,7 +86,10 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     toolsUsed = result.toolsUsed || [];
   } catch (err) {
     console.error('[chat] LLM provider error:', err);
-    return { status: 502, body: { error: 'Failed to get a response from the assistant. Please try again.' } };
+    return {
+      status: 502,
+      body: { error: 'Sorry, something went wrong while processing that request. Please try again.' },
+    };
   }
 
   const guardrailResult = validateReply({ reply: text, toolsUsed });

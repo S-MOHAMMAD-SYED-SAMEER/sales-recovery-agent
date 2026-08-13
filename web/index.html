@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sales-Recovery Support Agent — Demo</title>
+  <title>AI Customer Support &amp; Sales Recovery — Demo</title>
   <style>
     :root {
       --bg: #f7f7f8;
@@ -81,6 +81,11 @@
       line-height: 1.5;
     }
     .demo-notice strong { color: inherit; }
+    .try-list {
+      margin: 8px 0 8px;
+      padding-left: 18px;
+    }
+    .try-list li { margin-bottom: 3px; }
 
     .suggestions {
       display: flex;
@@ -129,6 +134,13 @@
       color: var(--error-text);
       font-size: 0.82rem;
       border-radius: 10px;
+    }
+    /* Neutral variant for status messages that aren't failures — the
+       first-message wake-up notice reads as information, not an error. */
+    .turn.system .bubble.info {
+      background: var(--badge-bg);
+      border-color: var(--border);
+      color: var(--badge-text);
     }
 
     .meta {
@@ -213,22 +225,33 @@
   <div class="app">
     <header>
       <div>
-        <h1>Sales-Recovery Support Agent</h1>
-        <p>Portfolio demo — a customer-support agent for a fictional online store, with retrieval,
-          tool use, memory, proactive signals, and safety guardrails.</p>
+        <h1>AI Customer Support &amp; Sales Recovery</h1>
+        <p>Helps online stores answer customer questions instantly, recover hesitant buyers, and
+          reduce repetitive support work.</p>
       </div>
       <button id="new-convo" type="button" title="Clear this conversation and start a new session">New conversation</button>
     </header>
 
     <div class="demo-notice">
       <strong>This is a demo with fictional data</strong> — no real store, orders, or payments are
-      connected. Try asking about order <strong>1001</strong>, <strong>1002</strong>, or
-      <strong>1003</strong>; whether the <strong>Ceramic Mug</strong> or <strong>Wool Scarf</strong>
-      is in stock; or whether code <strong>WELCOME10</strong> is valid.
+      connected. Everything below is safe to try:
+      <ul class="try-list">
+        <li><strong>Product availability</strong> — is the <strong>Ceramic Mug</strong> or
+          <strong>Wool Scarf</strong> in stock?</li>
+        <li><strong>Order status</strong> — where is order <strong>1001</strong>,
+          <strong>1002</strong>, or <strong>1003</strong>?</li>
+        <li><strong>Discount validity</strong> — is code <strong>WELCOME10</strong> still valid?</li>
+        <li><strong>Shipping questions</strong> — how long does international delivery take?</li>
+        <li><strong>Return policy</strong> — what happens if a customer wants to send something back?</li>
+        <li><strong>A hesitant buyer</strong> — "I like it, but I'm still deciding."</li>
+      </ul>
+      Every reply shows what the assistant checked before answering, and what it noticed about the
+      customer.
     </div>
 
     <div class="suggestions" id="suggestions">
       <button class="suggestion-chip" type="button" data-msg="How long does international shipping take?">Shipping to my country?</button>
+      <button class="suggestion-chip" type="button" data-msg="What is your return policy?">What's the return policy?</button>
       <button class="suggestion-chip" type="button" data-msg="What's the status of order 1001?">Status of order 1001?</button>
       <button class="suggestion-chip" type="button" data-msg="Is the Ceramic Mug in stock?">Is the Ceramic Mug in stock?</button>
       <button class="suggestion-chip" type="button" data-msg="Is the code WELCOME10 still valid?">Is WELCOME10 valid?</button>
@@ -264,23 +287,25 @@
     const newConvoButton = document.getElementById('new-convo');
     const suggestions = document.getElementById('suggestions');
 
-    // Real, currently-known tool/signal names, mapped to a friendlier label
-    // for display only — purely cosmetic, never invented data. If the API
-    // ever reports a name not in this map, the raw name is shown as-is
-    // rather than silently hiding it.
+    // Real, currently-known tool/signal names, mapped to plain-language labels
+    // a non-technical visitor can read — display only, purely cosmetic, never
+    // invented data. The API contract, the tool names, and the signal types
+    // are all unchanged; only these labels are. If the API ever reports a name
+    // not in this map, the raw name is shown as-is rather than silently
+    // hiding it.
     const TOOL_LABELS = {
-      getOrderStatus: 'Order lookup',
-      checkStock: 'Stock check',
-      checkDiscount: 'Discount check',
-      searchKnowledgeBase: 'Knowledge base',
+      getOrderStatus: 'Checked order status',
+      checkStock: 'Checked product availability',
+      checkDiscount: 'Checked promotion',
+      searchKnowledgeBase: 'Checked store information',
     };
     const SIGNAL_LABELS = {
-      purchase_intent: 'Purchase intent',
-      purchase_hesitation: 'Hesitation noticed',
-      shipping_concern: 'Shipping concern',
-      price_concern: 'Price concern',
-      return_concern: 'Return concern',
-      cart_abandonment_risk: 'May be leaving without buying',
+      purchase_intent: 'Noticed: ready to buy',
+      purchase_hesitation: 'Noticed: hesitation',
+      price_concern: 'Noticed: price concern',
+      shipping_concern: 'Noticed: delivery concern',
+      return_concern: 'Noticed: returns concern',
+      cart_abandonment_risk: 'Noticed: may leave without buying',
     };
 
     function hideEmptyState() {
@@ -308,7 +333,9 @@
       turn.appendChild(bubble);
 
       const badgeSources = [
-        ...(toolsUsed || []).map((name) => ({ text: `Used: ${TOOL_LABELS[name] || name}`, signal: false })),
+        // The labels above already read as complete phrases ("Checked order
+        // status"), so no "Used:" prefix is added on top of them.
+        ...(toolsUsed || []).map((name) => ({ text: TOOL_LABELS[name] || name, signal: false })),
         ...(signals || []).map((s) => ({ text: SIGNAL_LABELS[s.type] || s.type, signal: true })),
       ];
       if (badgeSources.length > 0) {
@@ -337,6 +364,41 @@
       scrollToBottom();
     }
 
+    // The very first message of a visit can be slow while the hosted service
+    // starts up. Rather than leaving the visitor staring at a typing indicator
+    // wondering if it's broken, say what's happening — but only once it has
+    // actually been slow, so a fast first response never shows it at all.
+    // This reports a real wait; it deliberately shows no percentage, countdown,
+    // or progress bar, because there is nothing real to base one on.
+    const WAKE_NOTICE_AFTER_MS = 2500;
+    let firstMessageDone = false;
+    let wakeNoticeTimer = null;
+    let wakeNoticeEl = null;
+
+    function startWakeNotice() {
+      if (firstMessageDone) return;
+      wakeNoticeTimer = setTimeout(() => {
+        hideEmptyState();
+        wakeNoticeEl = document.createElement('div');
+        wakeNoticeEl.className = 'turn system';
+        wakeNoticeEl.innerHTML = '<div class="bubble info"></div>';
+        wakeNoticeEl.querySelector('.bubble').textContent =
+          'Waking up the support assistant — this may take a few seconds on the first message.';
+        log.appendChild(wakeNoticeEl);
+        scrollToBottom();
+      }, WAKE_NOTICE_AFTER_MS);
+    }
+
+    function clearWakeNotice() {
+      clearTimeout(wakeNoticeTimer);
+      wakeNoticeTimer = null;
+      if (wakeNoticeEl) {
+        wakeNoticeEl.remove();
+        wakeNoticeEl = null;
+      }
+      firstMessageDone = true;
+    }
+
     function showTyping() {
       const turn = document.createElement('div');
       turn.className = 'turn assistant';
@@ -360,6 +422,7 @@
       sendButton.disabled = true;
       input.disabled = true;
       showTyping();
+      startWakeNotice();
 
       try {
         const res = await fetch('/api/chat', {
@@ -368,16 +431,22 @@
           body: JSON.stringify({ sessionId, message }),
         });
         const data = await res.json();
+        clearWakeNotice();
         hideTyping();
 
         if (!res.ok) {
-          appendSystemNotice(data.error || `Something went wrong (HTTP ${res.status}). Please try again.`);
+          appendSystemNotice(
+            data.error || 'Sorry, something went wrong while processing that request. Please try again.'
+          );
         } else {
           appendAssistantTurn(data.reply, data.toolsUsed, data.signals);
         }
       } catch (err) {
+        clearWakeNotice();
         hideTyping();
-        appendSystemNotice('Network error — is the server (and Chroma, for retrieval) running?');
+        appendSystemNotice(
+          "Sorry, we couldn't reach the assistant just now. Please try again in a moment."
+        );
       } finally {
         sendButton.disabled = false;
         input.disabled = false;
