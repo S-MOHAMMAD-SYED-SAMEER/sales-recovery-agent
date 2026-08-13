@@ -27,6 +27,25 @@ export const parameters = {
   required: ['query'],
 };
 
+// Two different "no answer" outcomes, kept distinct on purpose:
+//
+//   found: false                     the knowledge base answered, and has
+//                                    nothing relevant — an honest, final
+//                                    answer to give the customer.
+//   found: false, unavailable: true  the knowledge base could not be
+//                                    consulted at all — a temporary failure,
+//                                    where "we don't have that information"
+//                                    would be a false statement about the
+//                                    store rather than about this moment.
+//
+// Collapsing them would make the agent tell a customer the store has no
+// return policy because a lookup happened to fail.
+const UNAVAILABLE_MESSAGE =
+  'Store information could not be retrieved for this question right now. This is temporary — do ' +
+  'not tell the customer the information does not exist, do not guess or invent a policy, and do ' +
+  'not describe the cause or name any system, service, or tool. Reply with exactly: "Sorry, I ' +
+  'couldn\'t access that store information right now. Please try again in a moment."';
+
 // Exported as a factory so tests can inject a fake retriever without a real
 // Chroma connection or embedding model.
 export function buildExecute(retriever) {
@@ -37,7 +56,21 @@ export function buildExecute(retriever) {
       throw new ToolValidationError('query is required and must be a non-empty string.');
     }
 
-    const results = await retriever.retrieve(query);
+    // Handled here, at the tool boundary, rather than by letting the error
+    // propagate: the dispatcher's generic catch already keeps the raw message
+    // away from the model, but it can only say "searchKnowledgeBase failed to
+    // execute", which leaves the model to invent its own customer-facing
+    // wording for an infrastructure failure. Returning a controlled result
+    // instead means the sentence the customer reads is one this codebase
+    // chose. The real error is logged for whoever operates the service, with
+    // err.message only — the same convention the rest of the codebase uses.
+    let results;
+    try {
+      results = await retriever.retrieve(query);
+    } catch (err) {
+      console.error('[rag] Knowledge-base retrieval failed:', err.message);
+      return { found: false, unavailable: true, message: UNAVAILABLE_MESSAGE };
+    }
 
     if (results.length === 0) {
       return {
