@@ -6,6 +6,7 @@ import { embedText } from './embeddings.js';
 const vectorStore = createVectorStore({
   host: config.chromaHost,
   port: config.chromaPort,
+  ssl: config.chromaSsl,
   collectionName: config.chromaCollection,
 });
 

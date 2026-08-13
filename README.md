@@ -469,10 +469,15 @@ and preserving M1–M7 behavior unchanged:
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=<set in Render's dashboard>
 GEMINI_MODEL=gemini-3.5-flash-lite
-CHROMA_HOST=<the Chroma Render service's hostname>
-CHROMA_PORT=<its port>
+CHROMA_HOST=sales-recovery-chroma.onrender.com
+CHROMA_PORT=443
+CHROMA_SSL=true
 CHROMA_COLLECTION=sales_recovery_kb
 ```
+`CHROMA_PORT` is 443, not the container's 8000: Render's free tier routes to a service only through
+its public HTTPS endpoint, and this Chroma service has no private/internal hostname available (its
+Connect menu offers only Outbound IP Addresses). `CHROMA_SSL=true` is what makes the client build an
+`https://` URL — it defaults to false so local dev over plain HTTP is unaffected.
 `PORT`, `SQLITE_PATH`, and `KB_DIR` don't need to be set — Render injects `PORT` automatically, and
 the other two already default correctly relative to the deployed code.
 
@@ -546,12 +551,16 @@ Gemini adapter — see the M4 verification table above and the M3 notes for the 
 ```
 CHROMA_HOST=localhost        # optional, this is the default
 CHROMA_PORT=8000              # optional, this is the default
+CHROMA_SSL=false              # optional, this is the default
 CHROMA_COLLECTION=sales_recovery_kb   # optional, this is the default
 KB_DIR=                       # optional, defaults to server/data/kb
 ```
 
 None of these are required to be set — they only need overriding if you run Chroma on a different
-host/port. No new secret/API key was introduced by M4, M5, or M6 (Chroma, the embedding model,
+host/port, or behind TLS. `CHROMA_SSL` exists because the Chroma JS client composes its base URL as
+`${ssl ? 'https' : 'http'}://${host}:${port}` and has no way to infer the scheme from the hostname;
+it stays false for local dev and is set to true only against a hosted Chroma (see "Portfolio Demo
+Deployment" above). No new secret/API key was introduced by M4, M5, or M6 (Chroma, the embedding model,
 signal detection, guardrails, and the evaluation harness are all local; the eval harness's real
 mode reuses the same `GEMINI_API_KEY`/`ANTHROPIC_API_KEY` already configured for the app itself).
 

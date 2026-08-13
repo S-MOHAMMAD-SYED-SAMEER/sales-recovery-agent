@@ -26,6 +26,14 @@ export const config = {
   sqlitePath: process.env.SQLITE_PATH || DEFAULT_SQLITE_PATH,
   chromaHost: process.env.CHROMA_HOST || 'localhost',
   chromaPort: Number(process.env.CHROMA_PORT) || 8000,
+  // Whether to reach Chroma over HTTPS. Defaults to false so local dev
+  // (`chroma run` on plain http://localhost:8000) is unaffected. Needed only
+  // for a hosted Chroma reached over its public TLS endpoint — Render's free
+  // tier exposes services on 443/HTTPS only, and its private network is not
+  // available to a free Docker web service, so the public URL is the only
+  // route in. Parsed the same way as LLM_PROVIDER above (trim + lowercase),
+  // so "TRUE" and " true " both work; anything else is false.
+  chromaSsl: (process.env.CHROMA_SSL || '').trim().toLowerCase() === 'true',
   chromaCollection: process.env.CHROMA_COLLECTION || 'sales_recovery_kb',
   kbDir: process.env.KB_DIR || DEFAULT_KB_DIR,
 };

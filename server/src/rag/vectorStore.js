@@ -26,8 +26,13 @@ class ExternalEmbeddingFunction {
 // (not a module-level singleton) so tests can point it at a throwaway
 // collection instead of the real knowledge-base one — same pattern as
 // createConversationStore(db) in memory/conversationStore.js.
-export function createVectorStore({ host, port, collectionName }) {
-  const client = new ChromaClient({ host, port });
+// `ssl` defaults to false: the Chroma JS client builds its base URL as
+// `${ssl ? 'https' : 'http'}://${host}:${port}`, and local dev talks plain
+// HTTP to `chroma run`. A hosted Chroma behind TLS (see config/env.js's
+// chromaSsl) sets it to true — the client offers no way to infer the scheme
+// from the host, so it has to be passed explicitly.
+export function createVectorStore({ host, port, ssl = false, collectionName }) {
+  const client = new ChromaClient({ host, port, ssl });
   let collectionPromise;
 
   function getCollection() {

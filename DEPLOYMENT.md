@@ -34,11 +34,21 @@ configuration.
    LLM_PROVIDER=gemini
    GEMINI_API_KEY=<your Google AI Studio key>
    GEMINI_MODEL=gemini-3.5-flash-lite
-   CHROMA_HOST=<filled in after step 6>
-   CHROMA_PORT=<filled in after step 6>
+   CHROMA_HOST=sales-recovery-chroma.onrender.com
+   CHROMA_PORT=443
+   CHROMA_SSL=true
    CHROMA_COLLECTION=sales_recovery_kb
    ```
    Leave `PORT`, `SQLITE_PATH`, `KB_DIR` unset — they default correctly.
+
+   **Why 443 + `CHROMA_SSL=true` and not the container's port 8000:** Render's free tier exposes a
+   service only on its public HTTPS endpoint (443). Port 8000 is the port Chroma binds *inside* its
+   container and is not routable from outside. Render's private network — which would have allowed
+   plain HTTP on `8000` between the two services — is not offered for this service: the
+   `sales-recovery-chroma` Connect menu shows only Outbound IP Addresses, with no internal hostname,
+   so the public TLS endpoint is the only route in. The Chroma JS client builds its URL as
+   `${ssl ? 'https' : 'http'}://${host}:${port}` and cannot infer the scheme from the hostname, so
+   `CHROMA_SSL` has to be set explicitly or every request goes out as plain HTTP and fails.
 
 6. Create the second Render Web Service for Chroma, built from this repo's `sales-recovery-agent/chroma/Dockerfile`
    (a one-line wrapper around the official `chromadb/chroma` image — see that file's comments):
@@ -55,17 +65,19 @@ configuration.
    - No persistent Disk needed for a demo (see "Notes" below on what that trades away) — leave
      storage as the service's default ephemeral filesystem unless you specifically want durable
      vector storage across restarts.
-   - Note the hostname Render assigns this service (`CHROMA_HOST`) and confirm the port (`CHROMA_PORT=8000`).
+   - Note the public hostname Render assigns this service — that is `CHROMA_HOST`. The port to pair
+     it with is `443`, **not** 8000; see step 5's note for why.
 
-7. Go back to step 5's service and fill in `CHROMA_HOST`/`CHROMA_PORT` with the values from step 6,
-   then redeploy service #1 so the env vars take effect.
+7. Go back to step 5's service and fill in `CHROMA_HOST`/`CHROMA_PORT`/`CHROMA_SSL` with the values
+   from step 6, then redeploy service #1 so the env vars take effect.
 
 8. Run ingestion once, from your local machine, pointed at the deployed Chroma instance:
    ```
    cd sales-recovery-agent/server
-   CHROMA_HOST=<deployed host> CHROMA_PORT=<deployed port> npm run ingest
+   CHROMA_HOST=sales-recovery-chroma.onrender.com CHROMA_PORT=443 CHROMA_SSL=true npm run ingest
    ```
-   (Or set those two vars in your local `.env` temporarily for this one command, then revert.)
+   (Or set those three vars in your local `.env` temporarily for this one command, then revert.
+   Inline vars win over `.env`, since dotenv never overwrites an already-set variable.)
 
 9. Test `GET https://<your-render-app>.onrender.com/api/health` — should return `{"status":"ok"}`.
 
