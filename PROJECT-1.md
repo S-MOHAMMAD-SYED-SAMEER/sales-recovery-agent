@@ -4,9 +4,10 @@ A case study. Full technical documentation lives in [README.md](./README.md); th
 condensed version — what problem it solves, how it's built, the decisions behind it, and what it
 actually achieves, measured rather than claimed.
 
-**Status: complete (local dev), not deployed.** Everything described here runs locally and was
-verified locally. There is no live/hosted version, no real store connected, and no payment
-processing — see "Known limitations" below for the full list of what this is not.
+**Status: complete and deployed.** A live demo runs at
+<https://sales-recovery-agent-j0mc.onrender.com> on free-tier hosting, which sleeps when idle — the
+first message can take up to a minute while it wakes. There is no real store connected and no
+payment processing — see "Known limitations" below for the full list of what this is not.
 
 ## Problem
 
@@ -124,7 +125,7 @@ itself) and **real** (the actual configured provider — validates the agent).
 
 Measured directly, not estimated:
 
-- **153/153** automated unit/integration tests passing.
+- **206/206** automated unit/integration tests passing.
 - **16/16** evaluation cases passing in deterministic mock mode — 100% on every metric
   (tool-selection accuracy, signal-detection accuracy, grounded-answer accuracy, unsupported-answer
   accuracy, guardrail/safety pass rate; 0% hallucination rate).
@@ -140,8 +141,8 @@ limitations below.
 
 Stated plainly, not glossed over:
 
-- **Local development only.** No deployment exists. Running the demo requires a local Chroma
-  server and a configured API key.
+- **Free-tier hosting.** The deployed demo sleeps when idle, so the first request after a quiet
+  period is slow. Running it locally instead requires a local Chroma server and a configured API key.
 - **All order/stock/discount/knowledge-base data is fictional**, hardcoded for demonstration — not
   connected to a real store, inventory system, or CRM. The UI states this explicitly.
 - **No authentication, no payment processing, no real refund/compensation capability** — the agent
@@ -171,5 +172,4 @@ Gated by real need, not built speculatively (per this project's own operating ru
   tests.
 - Consider upgrading signal detection beyond regex only if real conversations show it's missing
   signals that would have mattered.
-- Deploy (Railway/Render, per the brief's stack) once the project reaches that stage of the
-  broader roadmap.
+- Move off free-tier hosting if the cold start becomes a problem for real demonstrations.
