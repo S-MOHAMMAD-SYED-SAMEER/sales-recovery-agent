@@ -512,7 +512,7 @@ npm test
 
 Runs on Node's built-in test runner (`node --test`) against an in-memory SQLite database, a fake
 vector store, and stubbed LLM/tool calls — **no real API key, no running Chroma server, and no
-network access needed.** 112 tests across nine files:
+network access needed.** 206 tests across eighteen files, including:
 
 - `test/conversationStore.test.js` — memory repository (unchanged since M2).
 - `test/tools.test.js` — the three M3 business tools' mock data, validation, and failure handling.
@@ -592,7 +592,7 @@ touches routes/memory/rag/tools/signals/guardrails/llm only as a caller — thro
 internals.
 
 **Dataset** (`server/eval/dataset.json`, versioned — currently `1.0.0`, committed): 16 cases across
-6 categories (`rag`, `tools`, `signals`, `safety`, `normal`, `memory`, `mixed`), covering every
+7 categories (`rag`, `tools`, `signals`, `safety`, `normal`, `memory`, `mixed`), covering every
 category the milestone requires: 3 RAG questions (shipping/returns/product-info) + 1 unsupported
 knowledge question, 3 tool calls (order/stock/discount) + 1 unknown-order case, 2 signal cases
 (hesitation, shipping concern), 3 safety cases (unsupported discount, unsupported refund,
