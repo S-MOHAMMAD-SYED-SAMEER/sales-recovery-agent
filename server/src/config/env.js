@@ -6,7 +6,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_SQLITE_PATH = path.resolve(__dirname, '../../data/memory.sqlite');
 const DEFAULT_KB_DIR = path.resolve(__dirname, '../../data/kb');
 
-const VALID_PROVIDERS = ['gemini', 'anthropic'];
+// "demo" needs no entry in REQUIRED_VARS_BY_PROVIDER below — it is the one
+// provider with no credential of any kind (see llm/providers/demo.js) — so
+// it falls through to the `|| []` default and is always configured.
+const VALID_PROVIDERS = ['gemini', 'anthropic', 'demo'];
 const provider = (process.env.LLM_PROVIDER || 'gemini').trim().toLowerCase();
 
 const REQUIRED_VARS_BY_PROVIDER = {
@@ -36,6 +39,11 @@ export const config = {
   chromaSsl: (process.env.CHROMA_SSL || '').trim().toLowerCase() === 'true',
   chromaCollection: process.env.CHROMA_COLLECTION || 'sales_recovery_kb',
   kbDir: process.env.KB_DIR || DEFAULT_KB_DIR,
+  // POST /api/chat only (see middleware/rateLimiter.js) — a small portfolio
+  // demo default: generous enough for one visitor trying every suggested
+  // question, small enough to bound a script hammering the endpoint.
+  rateLimitMax: Number(process.env.RATE_LIMIT_MAX) || 30,
+  rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60_000,
 };
 
 export const isConfigured = VALID_PROVIDERS.includes(provider) && missing.length === 0;

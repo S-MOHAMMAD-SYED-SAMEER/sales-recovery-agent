@@ -4,6 +4,7 @@ import express from 'express';
 import { config } from './config/env.js';
 import chatRouter from './routes/chat.js';
 import { knowledgeBaseRestorer } from './rag/index.js';
+import { createRateLimiter } from './middleware/rateLimiter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDir = path.resolve(__dirname, '../../web');
@@ -24,6 +25,12 @@ app.use((err, req, res, next) => {
 app.use(express.static(webDir));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+// Scoped to /api/chat only — /api/health above is registered first and is
+// never routed through this, by construction, not by an exclusion check.
+app.use(
+  '/api/chat',
+  createRateLimiter({ limit: config.rateLimitMax, windowMs: config.rateLimitWindowMs })
+);
 app.use('/api', chatRouter);
 
 app.listen(config.port, () => {

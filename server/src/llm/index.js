@@ -1,12 +1,14 @@
 import { config } from '../config/env.js';
 import * as anthropicProvider from './providers/anthropic.js';
 import * as geminiProvider from './providers/gemini.js';
+import * as demoProvider from './providers/demo.js';
 import { businessTools, getToolDefinitions, createToolExecutor } from '../tools/index.js';
 import * as searchKnowledgeBase from '../rag/searchKnowledgeBaseTool.js';
 
 const PROVIDERS = {
   gemini: geminiProvider,
   anthropic: anthropicProvider,
+  demo: demoProvider,
 };
 
 // The agent's full tool list: M3's live-business-data tools plus M4's
