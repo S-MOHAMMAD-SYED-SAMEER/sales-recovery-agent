@@ -5,7 +5,7 @@ condensed version — what problem it solves, how it's built, the decisions behi
 actually achieves, measured rather than claimed.
 
 **Status: complete and deployed.** A live demo runs at
-<https://sales-recovery-agent-j0mc.onrender.com> on free-tier hosting, which sleeps when idle — the
+<https://sales-recovery-agent-krk0.onrender.com> on free-tier hosting, which sleeps when idle — the
 first message can take up to a minute while it wakes. There is no real store connected and no
 payment processing — see "Known limitations" below for the full list of what this is not.
 
@@ -125,7 +125,9 @@ itself) and **real** (the actual configured provider — validates the agent).
 
 Measured directly, not estimated:
 
-- **206/206** automated unit/integration tests passing.
+- **247** automated unit/integration tests in the current suite (static count; last verified
+  passing per the commit that introduced the current total — see README's "Tests" section for
+  what it covers).
 - **16/16** evaluation cases passing in deterministic mock mode — 100% on every metric
   (tool-selection accuracy, signal-detection accuracy, grounded-answer accuracy, unsupported-answer
   accuracy, guardrail/safety pass rate; 0% hallucination rate).

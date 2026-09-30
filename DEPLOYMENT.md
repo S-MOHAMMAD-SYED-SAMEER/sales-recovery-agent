@@ -1,9 +1,10 @@
 # Deployment Checklist — Sales-Recovery Support Agent
 
-Practical, step-by-step. Nothing here has been done yet — this is the plan from the deployment
-feasibility audit, written down so it's ready to execute later. Steps marked **[YOU]** need your
-account, payment method, or a credential — Claude Code cannot do these (account creation and
-purchases aren't something an AI agent should do on your behalf).
+Practical, step-by-step. This is the deployment/setup guide for this standalone repository —
+the plan from the original deployment feasibility audit, now carried out and verified (see the
+live URLs in `README.md` and `PROJECT-1.md`). Steps marked **[YOU]** need your account, payment
+method, or a credential — Claude Code cannot do these (account creation and purchases aren't
+something an AI agent should do on your behalf).
 
 Recommended architecture (see `README.md`'s "Portfolio Demo Deployment" section for the full
 reasoning): app + frontend on one Render free Web Service, Chroma on a second Render free Web
@@ -15,12 +16,13 @@ configuration.
 1. **[YOU]** Create a free Render account at render.com (GitHub sign-in is easiest, since the repo
    is already on GitHub).
 
-2. **[YOU]** Connect Render to the `ai-business-automation` GitHub repository (Render will ask for
-   repo access during service creation — grant it to this repo only, not your whole GitHub account,
-   if it offers that choice).
+2. **[YOU]** Connect Render to the `sales-recovery-agent` GitHub repository — this project's own
+   standalone repository, not the `ai-business-automation` monorepo it was originally built inside
+   (Render will ask for repo access during service creation — grant it to this repo only, not your
+   whole GitHub account, if it offers that choice).
 
 3. Configure the Project 1 server as a Render **Web Service**:
-   - Root directory: `sales-recovery-agent/server`
+   - Root directory: `server`
    - Runtime: Node
    - Build command: `npm install`
    - Start command: `npm start`
@@ -50,15 +52,15 @@ configuration.
    `${ssl ? 'https' : 'http'}://${host}:${port}` and cannot infer the scheme from the hostname, so
    `CHROMA_SSL` has to be set explicitly or every request goes out as plain HTTP and fails.
 
-6. Create the second Render Web Service for Chroma, built from this repo's `sales-recovery-agent/chroma/Dockerfile`
+6. Create the second Render Web Service for Chroma, built from this repo's `chroma/Dockerfile`
    (a one-line wrapper around the official `chromadb/chroma` image — see that file's comments):
    - Environment: **Docker**
-   - Repository: same GitHub repo as the main app
-   - Root Directory: `sales-recovery-agent/chroma`
-   - Dockerfile Path: `sales-recovery-agent/chroma/Dockerfile` (if Render asks for it relative to
-     the repo root) or `Dockerfile` (if relative to the Root Directory you just set — Render's UI
-     has used both conventions at different times; use whichever the field's own placeholder/hint
-     implies)
+   - Repository: same GitHub repo as the main app (`sales-recovery-agent`, not the old monorepo —
+     see step 2)
+   - Root Directory: `chroma`
+   - Dockerfile Path: `chroma/Dockerfile` (if Render asks for it relative to the repo root) or
+     `Dockerfile` (if relative to the Root Directory you just set — Render's UI has used both
+     conventions at different times; use whichever the field's own placeholder/hint implies)
    - Port: `8000` (matches Chroma's own default and the app's `CHROMA_PORT` default — no mismatch
      to reconcile)
    - No environment variables are required for basic operation.
@@ -73,7 +75,7 @@ configuration.
 
 8. Run ingestion once, from your local machine, pointed at the deployed Chroma instance:
    ```
-   cd sales-recovery-agent/server
+   cd server
    CHROMA_HOST=sales-recovery-chroma.onrender.com CHROMA_PORT=443 CHROMA_SSL=true npm run ingest
    ```
    (Or set those three vars in your local `.env` temporarily for this one command, then revert.
@@ -110,8 +112,11 @@ wakes everything up.
   without a paid persistent Disk, that's the container's ephemeral filesystem, so the ingested
   knowledge base can be lost on a redeploy/restart. Re-running `npm run ingest` (step 8) restores
   it in seconds since the KB source files are tiny and committed to the repo — this is not lossy
-  in any way that matters for a demo. If durable Chroma storage across restarts is ever wanted,
-  attach a Render Disk mounted at `/data` on the Chroma service (paid feature).
+  in any way that matters for a demo. The app also does this automatically: it notices an empty
+  collection the next time a customer question needs it and re-ingests before answering, so a
+  restart doesn't require a manual step to recover (see README's "RAG knowledge base" section).
+  If durable Chroma storage across restarts is ever wanted, attach a Render Disk mounted at
+  `/data` on the Chroma service (paid feature).
 - Gemini's free-tier quota is 15 requests/minute regardless of hosting — space out messages during
   a demo the same way you would locally.
 - Nothing about this deployment changes the provider abstraction, RAG, tools, memory schema,

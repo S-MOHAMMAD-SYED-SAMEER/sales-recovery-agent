@@ -73,12 +73,22 @@ web/          Minimal static demo chat page (not embedded in the portfolio)
 ## LLM provider
 
 `LLM_PROVIDER` env var selects `gemini` (default, free tier, unblocks local dev while the
-Anthropic account has no prepaid credits) or `anthropic`. Both adapters live in
+Anthropic account has no prepaid credits), `anthropic`, or `demo`. All three adapters live in
 `server/src/llm/providers/` behind one interface, `generateReply({ systemPrompt, messages })`
 (`server/src/llm/index.js`) — routes never call an SDK directly, so switching providers is an
 env var change, not a code change. Since M3, `generateReply()` resolves to `{ text, toolsUsed }`
 instead of a bare string (see below) — the smallest change that could carry tool-usage
 information back to the route without leaking either provider's request/response shape into it.
+
+**`demo` provider** (`server/src/llm/providers/demo.js`) — a credential-free, fully deterministic
+stand-in: no Gemini or Anthropic key needed at all. It recognizes a fixed set of customer-support
+intents (order status, stock, discount, policy/RAG lookups, purchase-hesitation, and the one
+unsupported-refund case guardrails exist to catch) from the message text, then calls the exact
+same real tools/RAG the other providers call through the same `executeTool` — it never fabricates
+tool results or reimplements order/stock/discount/RAG logic itself, and every reply still passes
+through the real guardrail pipeline. It is not the same thing as the live Gemini deployment: it is
+narrower (only the scenarios it recognizes get a real answer; anything else gets a fixed "try one
+of the example questions" reply) and it never calls an external model at all.
 
 ## Conversation memory (M2)
 
@@ -291,6 +301,22 @@ additionally states the same rule up front. Verified live: asking about price-ma
 KB) produced "I'm sorry, I don't have information on whether we price-match other stores" — no
 invented policy.
 
+**Two different "no answer" cases, not one.** `searchKnowledgeBaseTool.js` keeps these distinct on
+purpose: `{ found: false }` means retrieval ran and genuinely found nothing relevant — the honest
+answer above. `{ found: false, unavailable: true }` means retrieval itself could not be completed
+(an embedding or Chroma failure) — a temporary condition, not a fact about the store, so the agent
+is instructed to say it couldn't check right now rather than that the policy doesn't exist.
+Collapsing the two would make an infrastructure hiccup look like "we have no return policy."
+
+**Empty-store recovery.** On a free-tier host, Chroma's collection can come back empty after a
+restart even though the app itself is fine (see "Portfolio Demo Deployment" below for why). This
+already exists in the code, not a new feature: `demoKnowledgeBase.js`'s restorer notices an empty
+collection the next time a query needs it, re-runs the same ingestion pipeline `npm run ingest`
+uses against the committed `data/kb/*.md` files, and retries the query once — the customer who
+happened to trigger it sees a normal, grounded answer, not a delay or an error. Verified live on
+the deployed instance: an empty collection was restored to 22 chunks from 4 files, after which the
+same shipping-policy question returned a substantive, grounded answer.
+
 | Example question | Routes to | Verified live |
 |---|---|---|
 | "How long does international shipping take?" | `searchKnowledgeBase` | ✅ correct, cited shipping policy |
@@ -425,7 +451,7 @@ Two local services are needed now: the Node app, and a local Chroma server for R
 ```
 # one-time: install the Chroma CLI (Python) and this project's Node deps
 pip install chromadb
-cd sales-recovery-agent/server
+cd server
 npm install
 cp .env.example .env      # then fill in GEMINI_API_KEY (or ANTHROPIC_API_KEY + LLM_PROVIDER=anthropic)
 
@@ -443,12 +469,19 @@ Open http://localhost:3000 — the server serves `web/index.html` as a static fi
 Without the active provider's API key set, `/api/chat` returns a `500` with a clear message
 instead of crashing the server.
 
+**Rate limiting.** `POST /api/chat` only — `/api/health` is never subject to it — is limited to
+`RATE_LIMIT_MAX` requests (default 30) per `RATE_LIMIT_WINDOW_MS` (default 60,000ms), per client
+IP, via a minimal in-process sliding-window limiter (`server/src/middleware/rateLimiter.js`, no
+external service). A client over the limit gets `429` with a `Retry-After` header. Both are
+overridable in `.env`.
+
 ## Portfolio Demo Deployment
 
-**Not deployed yet** — this documents the planned setup so it's ready when deployment happens; see
-[DEPLOYMENT.md](./DEPLOYMENT.md) for the step-by-step checklist. Recommended architecture, chosen in
-a deployment feasibility audit that specifically prioritized zero/low cost, minimal code changes,
-and preserving M1–M7 behavior unchanged:
+**Live**: a public demo runs at <https://sales-recovery-agent-krk0.onrender.com> — free-tier
+hosting, so it sleeps when idle and the first request after a quiet period can take about a
+minute to wake. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the checklist this was deployed from.
+Architecture, chosen in a deployment feasibility audit that specifically prioritized zero/low
+cost, minimal code changes, and preserving M1–M7 behavior unchanged:
 
 - **App (frontend + API, same process)** → a Render free Web Service. The existing `npm start`
   (`node src/index.js`) is already the correct start command — no code changes needed. Render's
@@ -458,7 +491,7 @@ and preserving M1–M7 behavior unchanged:
 - **Chroma (RAG vector store)** → a second, separate Render free Web Service, built from
   [`chroma/Dockerfile`](./chroma/Dockerfile) — a one-line wrapper around the official
   `chromadb/chroma` image, checked into this repo so Render's Docker build has something to point
-  at (root directory `sales-recovery-agent/chroma`, port `8000`). Only `CHROMA_HOST`/`CHROMA_PORT`
+  at (root directory `chroma`, port `8000`). Only `CHROMA_HOST`/`CHROMA_PORT`
   change on the app side — same client code as local dev, no application changes.
 - **Gemini** → unchanged, still the existing Google AI Studio API key, just set as a Render
   environment variable instead of a local `.env` file. **Never in a file, never in Git, never in
@@ -506,13 +539,13 @@ during the actual call being fast.
 ## Tests
 
 ```
-cd sales-recovery-agent/server
+cd server
 npm test
 ```
 
 Runs on Node's built-in test runner (`node --test`) against an in-memory SQLite database, a fake
 vector store, and stubbed LLM/tool calls — **no real API key, no running Chroma server, and no
-network access needed.** 206 tests across eighteen files, including:
+network access needed.** 247 tests across twenty-one files, including:
 
 - `test/conversationStore.test.js` — memory repository (unchanged since M2).
 - `test/tools.test.js` — the three M3 business tools' mock data, validation, and failure handling.
@@ -699,7 +732,7 @@ artifact, not a finding about the agent. `runEvaluation()` accepts a `delayMsBet
 (the CLI defaults to 8000ms in `--real` mode, override with `EVAL_DELAY_MS`) so a real run measures
 the agent, not the quota.
 
-**Deterministic tests vs. real run — what each does and doesn't prove.** `npm test` (153 tests)
+**Deterministic tests vs. real run — what each does and doesn't prove.** `npm test` (247 tests)
 includes the eval harness's *own* correctness: dataset schema validation (valid/invalid cases,
 duplicate ids, unknown fields), every metric function against hand-computed fixtures, the runner's
 grading logic, reproducibility (the same mock-mode run twice produces byte-identical results), and
