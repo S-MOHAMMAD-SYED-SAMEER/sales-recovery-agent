@@ -5,12 +5,32 @@ for a fictional small international D2C store. Architecture is locked per
 [project-brief_3.md](../project-brief_3.md) and [CLAUDE.md](../CLAUDE.md) — see the approved
 architecture proposal for the full design and milestone sequence.
 
+## Run it locally
+
+**Prerequisites:** Node.js 22.5 or newer (the `engines` field in `server/package.json`), and
+[Chroma](https://www.trychroma.com/) for the knowledge-base search — install it once with
+`pip install chromadb`.
+
+```
+cd server && npm install && npm run demo
+```
+
+Then open <http://localhost:3000>. One terminal is enough: `npm run demo` starts a local Chroma
+server if one isn't already running, ingests the knowledge base, and starts the app. Press Ctrl+C to
+stop everything.
+
+It runs on a fictional store's synthetic data with the deterministic `demo` LLM provider, so **no
+API key is needed**. The first run downloads a ~90MB embedding model once, so it needs a network
+connection that time.
+
+<!-- DEMO_VIDEO: 60–90s screen recording of the app running locally goes here -->
+
 ## Status: complete (M1–M7)
 
 All seven build milestones are done: LLM provider abstraction, SQLite memory, business
 tool-calling, RAG, proactive signals + guardrails, an evaluation harness, and this finalization
-pass (demo UI, documentation, and an end-to-end audit). Locally runnable and tested; **not
-deployed**. See [PROJECT-1.md](./PROJECT-1.md) for the case-study write-up.
+pass (demo UI, documentation, and an end-to-end audit). Locally runnable and tested — see "Run it
+locally" above. See [PROJECT-1.md](./PROJECT-1.md) for the case-study write-up.
 
 ## Overview
 
@@ -86,7 +106,7 @@ intents (order status, stock, discount, policy/RAG lookups, purchase-hesitation,
 unsupported-refund case guardrails exist to catch) from the message text, then calls the exact
 same real tools/RAG the other providers call through the same `executeTool` — it never fabricates
 tool results or reimplements order/stock/discount/RAG logic itself, and every reply still passes
-through the real guardrail pipeline. It is not the same thing as the live Gemini deployment: it is
+through the real guardrail pipeline. It is not the same thing as running a real model: it is
 narrower (only the scenarios it recognizes get a real answer; anything else gets a fixed "try one
 of the example questions" reply) and it never calls an external model at all.
 
@@ -239,8 +259,8 @@ no-Docker local option would have meant downloading and trusting an unsigned bin
 releases, which is both more fragile and a worse security posture for a dev setup. Qdrant Cloud's
 free tier (considered for M1's original RAG sketch) was ruled back out here because the task
 explicitly scopes this to *local* development, not a hosted dependency. This is a local-dev
-decision, not a production one — a real deployment's vector-store hosting is an open question for
-later, not solved now.
+decision, not a production one — where a production vector store would be hosted is an open
+question for later, not solved now.
 
 **Document ingestion & chunking** (`server/src/rag/chunker.js`, `ingest.js`). Source documents are
 real markdown files in `data/kb/`: `shipping-policy.md`, `returns-policy.md`, `product-info.md`,
@@ -308,14 +328,15 @@ answer above. `{ found: false, unavailable: true }` means retrieval itself could
 is instructed to say it couldn't check right now rather than that the policy doesn't exist.
 Collapsing the two would make an infrastructure hiccup look like "we have no return policy."
 
-**Empty-store recovery.** On a free-tier host, Chroma's collection can come back empty after a
-restart even though the app itself is fine (see "Portfolio Demo Deployment" below for why). This
+**Empty-store recovery.** On a host with an ephemeral filesystem, Chroma's collection can come back
+empty after a restart even though the app itself is fine (see "Deploying your own instance" below
+for why). This
 already exists in the code, not a new feature: `demoKnowledgeBase.js`'s restorer notices an empty
 collection the next time a query needs it, re-runs the same ingestion pipeline `npm run ingest`
 uses against the committed `data/kb/*.md` files, and retries the query once — the customer who
-happened to trigger it sees a normal, grounded answer, not a delay or an error. Verified live on
-the deployed instance: an empty collection was restored to 22 chunks from 4 files, after which the
-same shipping-policy question returned a substantive, grounded answer.
+happened to trigger it sees a normal, grounded answer, not a delay or an error. Verified live
+against a hosted Chroma during development: an empty collection was restored to 22 chunks from 4
+files, after which the same shipping-policy question returned a substantive, grounded answer.
 
 | Example question | Routes to | Verified live |
 |---|---|---|
@@ -475,54 +496,51 @@ IP, via a minimal in-process sliding-window limiter (`server/src/middleware/rate
 external service). A client over the limit gets `429` with a `Retry-After` header. Both are
 overridable in `.env`.
 
-## Portfolio Demo Deployment
+## Deploying your own instance
 
-**Live**: a public demo runs at <https://sales-recovery-agent-krk0.onrender.com> — free-tier
-hosting, so it sleeps when idle and the first request after a quiet period can take about a
-minute to wake. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the checklist this was deployed from.
-Architecture, chosen in a deployment feasibility audit that specifically prioritized zero/low
-cost, minimal code changes, and preserving M1–M7 behavior unchanged:
+Nothing about the app needs changing to host it; this is how it is meant to be deployed. See
+[DEPLOYMENT.md](./DEPLOYMENT.md) for the step-by-step checklist. The architecture, chosen in a
+deployment feasibility audit that prioritized low cost, minimal code changes, and preserving M1–M7
+behavior unchanged:
 
-- **App (frontend + API, same process)** → a Render free Web Service. The existing `npm start`
-  (`node src/index.js`) is already the correct start command — no code changes needed. Render's
-  free tier is a genuine persistent-process host (unlike Vercel's serverless functions, which time
-  out at 10s on the Hobby plan — too short for a RAG/tool-calling turn — so the backend stays off
-  Vercel; only the portfolio itself stays there).
-- **Chroma (RAG vector store)** → a second, separate Render free Web Service, built from
+- **App (frontend + API, same process)** → a Render Web Service. The existing `npm start`
+  (`node src/index.js`) is already the correct start command — no code changes needed. Render is a
+  genuine persistent-process host (unlike Vercel's serverless functions, which time out at 10s on
+  the Hobby plan — too short for a RAG/tool-calling turn), so the backend stays off Vercel.
+- **Chroma (RAG vector store)** → a second, separate Render Web Service, built from
   [`chroma/Dockerfile`](./chroma/Dockerfile) — a one-line wrapper around the official
   `chromadb/chroma` image, checked into this repo so Render's Docker build has something to point
   at (root directory `chroma`, port `8000`). Only `CHROMA_HOST`/`CHROMA_PORT`
   change on the app side — same client code as local dev, no application changes.
 - **Gemini** → unchanged, still the existing Google AI Studio API key, just set as a Render
   environment variable instead of a local `.env` file. **Never in a file, never in Git, never in
-  chat/logs.**
+  chat/logs.** To host the credential-free demo instead, set `LLM_PROVIDER=demo` and no key is
+  needed.
 
-**Required environment variables** (set in Render's dashboard UI, not committed anywhere):
+**Required environment variables** (set in your host's dashboard UI, not committed anywhere):
 ```
 LLM_PROVIDER=gemini
-GEMINI_API_KEY=<set in Render's dashboard>
+GEMINI_API_KEY=<set in your host's dashboard>
 GEMINI_MODEL=gemini-3.5-flash-lite
-CHROMA_HOST=sales-recovery-chroma.onrender.com
+CHROMA_HOST=<your-chroma-host>
 CHROMA_PORT=443
 CHROMA_SSL=true
 CHROMA_COLLECTION=sales_recovery_kb
 ```
 `CHROMA_PORT` is 443, not the container's 8000: Render's free tier routes to a service only through
-its public HTTPS endpoint, and this Chroma service has no private/internal hostname available (its
-Connect menu offers only Outbound IP Addresses). `CHROMA_SSL=true` is what makes the client build an
-`https://` URL — it defaults to false so local dev over plain HTTP is unaffected.
-`PORT`, `SQLITE_PATH`, and `KB_DIR` don't need to be set — Render injects `PORT` automatically, and
-the other two already default correctly relative to the deployed code.
+its public HTTPS endpoint, and a Chroma service there has no private/internal hostname available.
+`CHROMA_SSL=true` is what makes the client build an `https://` URL — it defaults to false so local
+dev over plain HTTP is unaffected. `PORT`, `SQLITE_PATH`, and `KB_DIR` don't need to be set —
+Render injects `PORT` automatically, and the other two already default correctly relative to the
+deployed code.
 
-**Ingestion**: `npm run ingest` still needs to run once against the deployed Chroma instance to
-populate the knowledge base — it can be run from a local machine with `CHROMA_HOST`/`CHROMA_PORT`
-pointed at the deployed Chroma service; the local embedding model already does the work, no new
-code needed.
+**Ingestion**: `npm run ingest` needs to run once against the hosted Chroma instance to populate
+the knowledge base — it can be run from a local machine with `CHROMA_HOST`/`CHROMA_PORT` pointed at
+the hosted Chroma service; the local embedding model already does the work, no new code needed.
 
-**SQLite persistence is demo-session-scoped, not durable**, on Render's free tier — the free tier
+**SQLite persistence is session-scoped, not durable**, on Render's free tier — the free tier
 doesn't include a persistent disk (that's a separate paid add-on), so conversation memory can be
-reset on redeploys/restarts. Acceptable for a portfolio demo (every visitor starts a fresh browser
-session anyway); not something to rely on for real customer data without upgrading later.
+reset on redeploys/restarts. Not something to rely on for real customer data without upgrading.
 
 **Chroma's data has the same caveat**, for the same reason — it writes to `/data` inside its
 container (the upstream image's own default), which is ephemeral without a paid Render Disk
@@ -530,11 +548,9 @@ attached. Unlike conversation memory, this is trivially recoverable: re-running 
 rebuilds the whole (tiny, 4-document) knowledge base in seconds from files already committed to
 the repo.
 
-**Free-tier cold starts**: Render free services spin down after 15 minutes idle and take about a
-minute to wake back up on the next request — worse case, both the app and the separate Chroma
-service could be asleep at once. **Before a live client call, open the demo URL and send one
-message a couple of minutes early** to warm both services up; don't rely on the first message
-during the actual call being fast.
+**Cold starts**: free-tier hosts spin services down when idle, and the next request waits for them
+to wake — the app and the separate Chroma service can both be asleep at once. Warm both up before
+anyone relies on the instance.
 
 ## Tests
 
@@ -592,8 +608,8 @@ KB_DIR=                       # optional, defaults to server/data/kb
 None of these are required to be set — they only need overriding if you run Chroma on a different
 host/port, or behind TLS. `CHROMA_SSL` exists because the Chroma JS client composes its base URL as
 `${ssl ? 'https' : 'http'}://${host}:${port}` and has no way to infer the scheme from the hostname;
-it stays false for local dev and is set to true only against a hosted Chroma (see "Portfolio Demo
-Deployment" above). No new secret/API key was introduced by M4, M5, or M6 (Chroma, the embedding model,
+it stays false for local dev and is set to true only against a hosted Chroma (see "Deploying your
+own instance" above). No new secret/API key was introduced by M4, M5, or M6 (Chroma, the embedding model,
 signal detection, guardrails, and the evaluation harness are all local; the eval harness's real
 mode reuses the same `GEMINI_API_KEY`/`ANTHROPIC_API_KEY` already configured for the app itself).
 
@@ -776,5 +792,5 @@ genuinely demo- and portfolio-ready:
 
 Project 1 itself is done. Per the top-level roadmap (`CLAUDE.md`, `project-brief_3.md`): Projects 2
 (Inbox-to-CRM Agent) and 3 (Explainable ATS) are next, followed by client acquisition. Portfolio
-polish and any deployment of this project are tracked separately and were explicitly out of scope
+polish and any hosting of this project are tracked separately and were explicitly out of scope
 for M7.

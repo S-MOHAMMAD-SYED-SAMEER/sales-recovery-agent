@@ -4,9 +4,8 @@ A case study. Full technical documentation lives in [README.md](./README.md); th
 condensed version — what problem it solves, how it's built, the decisions behind it, and what it
 actually achieves, measured rather than claimed.
 
-**Status: complete and deployed.** A live demo runs at
-<https://sales-recovery-agent-krk0.onrender.com> on free-tier hosting, which sleeps when idle — the
-first message can take up to a minute while it wakes. There is no real store connected and no
+**Status: complete.** It runs locally with one command (see "Run it locally" in the README), on
+synthetic data and a credential-free demo provider. There is no real store connected and no
 payment processing — see "Known limitations" below for the full list of what this is not.
 
 ## Problem
@@ -143,8 +142,9 @@ limitations below.
 
 Stated plainly, not glossed over:
 
-- **Free-tier hosting.** The deployed demo sleeps when idle, so the first request after a quiet
-  period is slow. Running it locally instead requires a local Chroma server and a configured API key.
+- **No hosted instance.** It is run locally; the README and `DEPLOYMENT.md` describe how to host
+  your own. Running it needs a local Chroma server, and a configured API key unless the
+  credential-free `demo` provider is used.
 - **All order/stock/discount/knowledge-base data is fictional**, hardcoded for demonstration — not
   connected to a real store, inventory system, or CRM. The UI states this explicitly.
 - **No authentication, no payment processing, no real refund/compensation capability** — the agent
@@ -174,4 +174,3 @@ Gated by real need, not built speculatively (per this project's own operating ru
   tests.
 - Consider upgrading signal detection beyond regex only if real conversations show it's missing
   signals that would have mattered.
-- Move off free-tier hosting if the cold start becomes a problem for real demonstrations.
