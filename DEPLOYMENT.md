@@ -1,15 +1,14 @@
-# Deployment Checklist — Sales-Recovery Support Agent
+# Deploying your own instance — Sales-Recovery Support Agent
 
-Practical, step-by-step. This is the deployment/setup guide for this standalone repository —
-the plan from the original deployment feasibility audit, now carried out and verified (see the
-live URLs in `README.md` and `PROJECT-1.md`). Steps marked **[YOU]** need your account, payment
-method, or a credential — Claude Code cannot do these (account creation and purchases aren't
-something an AI agent should do on your behalf).
+Practical, step-by-step: how to host your own copy of this app. No instance of it is hosted for
+you — to just try it, run it locally (see "Run it locally" in `README.md`). Steps marked **[YOU]**
+need your account, payment method, or a credential — Claude Code cannot do these (account creation
+and purchases aren't something an AI agent should do on your behalf).
 
-Recommended architecture (see `README.md`'s "Portfolio Demo Deployment" section for the full
-reasoning): app + frontend on one Render free Web Service, Chroma on a second Render free Web
-Service, Gemini unchanged via env var. No code or architecture changes required — only deployment
-configuration.
+Recommended architecture (see `README.md`'s "Deploying your own instance" section for the full
+reasoning): app + frontend on one Render Web Service, Chroma on a second Render Web Service,
+Gemini unchanged via env var — or `LLM_PROVIDER=demo` if you want a credential-free instance. No
+code or architecture changes required — only deployment configuration.
 
 ## Checklist
 
@@ -36,7 +35,7 @@ configuration.
    LLM_PROVIDER=gemini
    GEMINI_API_KEY=<your Google AI Studio key>
    GEMINI_MODEL=gemini-3.5-flash-lite
-   CHROMA_HOST=sales-recovery-chroma.onrender.com
+   CHROMA_HOST=<your-chroma-host>
    CHROMA_PORT=443
    CHROMA_SSL=true
    CHROMA_COLLECTION=sales_recovery_kb
@@ -47,7 +46,7 @@ configuration.
    service only on its public HTTPS endpoint (443). Port 8000 is the port Chroma binds *inside* its
    container and is not routable from outside. Render's private network — which would have allowed
    plain HTTP on `8000` between the two services — is not offered for this service: the
-   `sales-recovery-chroma` Connect menu shows only Outbound IP Addresses, with no internal hostname,
+   Chroma service's Connect menu shows only Outbound IP Addresses, with no internal hostname,
    so the public TLS endpoint is the only route in. The Chroma JS client builds its URL as
    `${ssl ? 'https' : 'http'}://${host}:${port}` and cannot infer the scheme from the hostname, so
    `CHROMA_SSL` has to be set explicitly or every request goes out as plain HTTP and fails.
@@ -76,14 +75,14 @@ configuration.
 8. Run ingestion once, from your local machine, pointed at the deployed Chroma instance:
    ```
    cd server
-   CHROMA_HOST=sales-recovery-chroma.onrender.com CHROMA_PORT=443 CHROMA_SSL=true npm run ingest
+   CHROMA_HOST=<your-chroma-host> CHROMA_PORT=443 CHROMA_SSL=true npm run ingest
    ```
    (Or set those three vars in your local `.env` temporarily for this one command, then revert.
    Inline vars win over `.env`, since dotenv never overwrites an already-set variable.)
 
-9. Test `GET https://<your-render-app>.onrender.com/api/health` — should return `{"status":"ok"}`.
+9. Test `GET https://<your-app-host>/api/health` — should return `{"status":"ok"}`.
 
-10. Test the actual demo end to end against the deployed URL — at minimum:
+10. Test the app end to end against your instance's URL — at minimum:
     - A shipping/RAG question ("How long does international shipping take?")
     - An order-status tool question ("What's the status of order 1001?")
     - A stock question ("Is the Ceramic Mug in stock?")
@@ -91,34 +90,29 @@ configuration.
     - Multi-turn memory (ask a follow-up referencing the previous message)
     - Confirm `toolsUsed`/`signals` badges in the UI match what actually happened
 
-11. **[YOU]** Add the live demo URL to the portfolio's Project 1 card
-    (`portfolio/src/data/projects.ts` — add an `href`; note: `Projects.tsx` doesn't currently render
-    `href` even though the type allows it, so that component needs a small template change too —
-    a separate, small follow-up task, not part of this deployment).
-
-## Before every live client demo
+## Before relying on a free-tier instance
 
 Cold starts: Render free services sleep after 15 minutes idle and take ~1 minute to wake up — worst
-case, both services are asleep at once. **Open the demo URL and send one test message a couple of
-minutes before the call starts.** Don't let the first message during an actual demo be the one that
-wakes everything up.
+case, both services are asleep at once. **Open your instance's URL and send one test message a
+couple of minutes before anyone needs it.** Don't let the first real message be the one that wakes
+everything up.
 
 ## Notes
 
-- SQLite conversation memory is demo-session-scoped on Render's free tier (no persistent disk on
-  free — that's a paid add-on). Acceptable for a demo; not durable storage.
+- SQLite conversation memory is session-scoped on Render's free tier (no persistent disk on
+  free — that's a paid add-on). Fine for a trial instance; not durable storage.
 - Chroma's data lives at `/data` inside its container (that's the upstream image's own default —
   nothing in this repo's Dockerfile changes it). Same story as SQLite: on Render's free tier
   without a paid persistent Disk, that's the container's ephemeral filesystem, so the ingested
   knowledge base can be lost on a redeploy/restart. Re-running `npm run ingest` (step 8) restores
   it in seconds since the KB source files are tiny and committed to the repo — this is not lossy
-  in any way that matters for a demo. The app also does this automatically: it notices an empty
+  in any way that matters for a trial instance. The app also does this automatically: it notices an empty
   collection the next time a customer question needs it and re-ingests before answering, so a
   restart doesn't require a manual step to recover (see README's "RAG knowledge base" section).
   If durable Chroma storage across restarts is ever wanted, attach a Render Disk mounted at
   `/data` on the Chroma service (paid feature).
-- Gemini's free-tier quota is 15 requests/minute regardless of hosting — space out messages during
-  a demo the same way you would locally.
+- Gemini's free-tier quota is 15 requests/minute regardless of hosting — space out messages the
+  same way you would locally.
 - Nothing about this deployment changes the provider abstraction, RAG, tools, memory schema,
   signals, guardrails, or the evaluation harness — see `README.md` and `PROJECT-1.md` for what those
   actually are; deployment doesn't touch any of it.

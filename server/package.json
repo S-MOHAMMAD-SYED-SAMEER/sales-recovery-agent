@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "demo": "node scripts/demo.js",
     "test": "node --test",
     "ingest": "node scripts/ingest.js",
     "eval": "node scripts/eval.js",
