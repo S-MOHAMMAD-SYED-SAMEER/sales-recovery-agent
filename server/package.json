@@ -7,6 +7,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "demo": "node scripts/demo.js",
+    "live": "node scripts/live.js",
     "test": "node --env-file=test/test.env --test",
     "ingest": "node scripts/ingest.js",
     "smoke": "node scripts/smoke.js",
