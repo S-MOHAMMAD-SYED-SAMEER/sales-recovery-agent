@@ -11,8 +11,8 @@ const router = Router();
 export const MAX_MESSAGE_CHARS = 2000;
 const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-// Full pipeline as of M7: M2 memory, M3 tool-calling, M4 RAG, M5 proactive
-// signals + guardrails, all evaluated by M6's harness (server/src/eval/).
+// The full pipeline: memory, tool-calling, RAG, proactive signals and
+// guardrails, all exercised by the evaluation harness (server/src/eval/).
 const BASE_SYSTEM_PROMPT =
   'You are a helpful customer support assistant for a small online store. ' +
   'Keep answers brief and honest. If you are not sure about something, say so. ' +

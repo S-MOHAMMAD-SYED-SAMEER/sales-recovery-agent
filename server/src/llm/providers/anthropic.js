@@ -19,8 +19,6 @@ const client = config.anthropicApiKey
     })
   : null;
 
-export const isConfigured = Boolean(client);
-
 // Lower than the API default of 1.0: a support answer should vary less between
 // runs. LLM_TEMPERATURE overrides it.
 const DEFAULT_TEMPERATURE = 0.2;

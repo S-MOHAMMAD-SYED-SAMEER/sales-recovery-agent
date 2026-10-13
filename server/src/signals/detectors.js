@@ -1,6 +1,5 @@
 // Deterministic, keyword/pattern-based signal detection — deliberately not
-// an LLM classifier. Reasoning (same as M1's original proactive-signal
-// design and unchanged since): a handful of regexes are free, instant,
+// an LLM classifier. Reasoning: a handful of regexes are free, instant,
 // 100% reproducible, and easy for a human to read and explain end to end.
 // Known limitation, stated plainly: this only catches fairly direct
 // phrasing in English — it will miss paraphrases, sarcasm, or indirect

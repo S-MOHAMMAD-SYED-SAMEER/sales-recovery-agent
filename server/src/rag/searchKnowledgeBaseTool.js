@@ -1,7 +1,7 @@
 import { ToolValidationError } from '../tools/errors.js';
 import { retriever as defaultRetriever, knowledgeBaseRestorer as defaultRestorer } from './index.js';
 
-// Registered as a tool (same shape as the M3 business tools: name,
+// Registered as a tool (same shape as the business tools: name,
 // description, parameters, execute) so it flows through the exact same
 // tool-calling loop — the model decides when it needs stable/reference
 // knowledge the same way it decides when it needs live business data,

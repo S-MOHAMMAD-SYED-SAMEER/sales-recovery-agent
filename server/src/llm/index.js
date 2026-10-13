@@ -11,7 +11,7 @@ const PROVIDERS = {
   demo: demoProvider,
 };
 
-// The agent's full tool list: M3's live-business-data tools plus M4's
+// The agent's full tool list: the live-business-data tools plus the
 // knowledge-base search tool, combined here (not inside tools/index.js or
 // rag/index.js) so neither module needs to know the other exists — this is
 // the one place that does.

@@ -158,15 +158,5 @@ export function createVectorStore({
     async deleteBySource(source) {
       await withCollection((collection) => collection.delete({ where: { source } }));
     },
-
-    // Test-only: wipe and recreate the collection so each test starts clean.
-    async reset() {
-      try {
-        await client.deleteCollection({ name: collectionName });
-      } catch {
-        // collection didn't exist yet — nothing to clean up
-      }
-      collectionPromise = undefined;
-    },
   };
 }

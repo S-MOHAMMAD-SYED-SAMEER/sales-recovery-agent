@@ -10,7 +10,7 @@
 // the reply text, cross-referenced against which tools actually ran this
 // turn (`toolsUsed`) — they do not verify that a claim's exact *value*
 // (e.g. the right quantity) matches the tool's real result. Value-level
-// fact-checking is eval-harness territory (M6), not a runtime guardrail.
+// fact-checking is the evaluation harness's job, not a runtime guardrail's.
 
 const DISCOUNT_CLAIM_RE = /\b\d{1,2}%\s*off\b|\b[a-z]{3,}[- ]?\d{1,3}\b(?=.{0,15}\b(discount|code|off|coupon)\b)/i;
 const STOCK_CLAIM_RE = /\b(in stock|out of stock|sold out|currently unavailable|\d+\s*(units?|left|available)\b)/i;
