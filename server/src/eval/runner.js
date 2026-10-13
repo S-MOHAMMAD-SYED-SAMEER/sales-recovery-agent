@@ -51,11 +51,16 @@ async function runCase(evalCase, { mode, generateReply }) {
   );
 
   if (result.status !== 200) {
-    return evaluateCase(evalCase, {
-      reply: `[HTTP ${result.status}] ${result.body?.error || 'request failed'}`,
-      toolsUsed: [],
-      signals: [],
-    });
+    // The model never answered (a quota, a timeout, a block, an outage). That is
+    // not something the agent said, so it must not be graded as if it were: the
+    // reply "[HTTP 502]" would trivially pass every "must not contain" check and
+    // flatter the safety numbers. It is recorded as a failed case with no checks,
+    // so it counts against the pass rate but is left out of every metric's
+    // denominator.
+    return {
+      ...failedCaseResult(evalCase, new Error(`HTTP ${result.status}: ${result.body?.error || 'request failed'}`)),
+      providerError: true,
+    };
   }
 
   // Tokens and latency of the model calls behind this reply: null in mock mode,
@@ -87,12 +92,26 @@ function sleep(ms) {
 // 429 there is a quota artifact, not a real finding about the agent, and
 // without pacing it silently masquerades as agent failures in the results.
 // Default is 0 (no delay) so mock-mode runs and unit tests stay instant.
-export async function runEvaluation({ dataset, mode = 'mock', generateReply, delayMsBetweenCases = 0 }) {
+//
+// maxConsecutiveProviderErrors: in real mode, stop the run after this many cases
+// in a row that got no answer from the model (0 = never stop). A quota or an
+// outage that retries could not clear will not clear on the next case either, and
+// carrying on would only spend more calls on a service that is refusing them.
+// The result then has `aborted` set and lists how many cases were not run.
+export async function runEvaluation({
+  dataset,
+  mode = 'mock',
+  generateReply,
+  delayMsBetweenCases = 0,
+  maxConsecutiveProviderErrors = 0,
+}) {
   if (mode === 'real' && typeof generateReply !== 'function') {
     throw new Error('runEvaluation({ mode: "real" }) requires a generateReply function.');
   }
 
   const caseResults = [];
+  let consecutiveProviderErrors = 0;
+  let aborted = null;
   for (const [index, evalCase] of dataset.cases.entries()) {
     if (mode === 'real' && index > 0 && delayMsBetweenCases > 0) {
       await sleep(delayMsBetweenCases);
@@ -101,6 +120,23 @@ export async function runEvaluation({ dataset, mode = 'mock', generateReply, del
       caseResults.push(await runCase(evalCase, { mode, generateReply }));
     } catch (err) {
       caseResults.push(failedCaseResult(evalCase, err));
+    }
+
+    const last = caseResults[caseResults.length - 1];
+    consecutiveProviderErrors = last.providerError ? consecutiveProviderErrors + 1 : 0;
+    if (
+      mode === 'real' &&
+      maxConsecutiveProviderErrors > 0 &&
+      consecutiveProviderErrors >= maxConsecutiveProviderErrors &&
+      index < dataset.cases.length - 1
+    ) {
+      aborted = {
+        reason: `${consecutiveProviderErrors} cases in a row got no answer from the model; stopped so as not to keep spending calls.`,
+        lastCase: evalCase.id,
+        lastError: last.error,
+        casesNotRun: dataset.cases.length - (index + 1),
+      };
+      break;
     }
   }
 
@@ -112,6 +148,7 @@ export async function runEvaluation({ dataset, mode = 'mock', generateReply, del
     ...summary,
     // Run totals of the per-case usage: calls, tokens, time. Null in mock mode.
     usage: combineUsage(caseResults.map((c) => c.usage)),
+    aborted,
     cases: caseResults,
   };
 }

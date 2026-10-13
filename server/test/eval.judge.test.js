@@ -50,3 +50,20 @@ test('a judge call that throws is recorded as unparsed and does not stop the run
     [true, false, true]
   );
 });
+
+test('a case with no reply (the model never answered) is not sent to the judge', async () => {
+  let calls = 0;
+  const actual = new Map([
+    ['a', { reply: 'reply a' }],
+    ['b', { reply: null }],
+    ['c', { reply: 'reply c' }],
+  ]);
+  const results = await judgeAllCases(dataset, actual, {
+    generateReply: async (args) => {
+      calls += 1;
+      return goodJudge(args);
+    },
+  });
+  assert.equal(calls, 2);
+  assert.deepEqual(results.map((r) => r.id), ['a', 'c']);
+});
