@@ -114,7 +114,26 @@ async function main() {
   const dataset = validateDataset(raw);
 
   if (regradeFrom) {
-    const prior = JSON.parse(fs.readFileSync(path.resolve(regradeFrom), 'utf-8'));
+    let prior = JSON.parse(fs.readFileSync(path.resolve(regradeFrom), 'utf-8'));
+    // A guardrail capture (scripts/guardrail-fp.js) also holds a real reply for every
+    // dataset case: that is a second, independent real run, and can be graded the same way.
+    if (prior.prompts && !prior.cases) {
+      prior = {
+        ...prior,
+        datasetVersion: prior.meta?.datasetVersion,
+        cases: prior.prompts
+          .filter((p) => p.set === 'dataset')
+          .map((p) => ({
+            id: p.id,
+            actual: p.status === 200 ? { reply: p.finalReply, toolsUsed: p.toolsUsed, signals: p.signals.map((type) => ({ type })) } : null,
+            usage: p.usage ?? null,
+            providerError: p.status !== 200,
+            passed: false,
+            checks: {},
+            hallucination: { checked: false, hallucinated: false },
+          })),
+      };
+    }
     const { evaluateCase, aggregateMetrics } = await import('../src/eval/metrics.js');
     const { combineUsage } = await import('../src/llm/usage.js');
     const graded = [];

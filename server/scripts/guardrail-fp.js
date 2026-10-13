@@ -37,6 +37,10 @@ const capture = args.includes('--capture');
 // --prompts=<file>: capture only the prompts in that file ({ version, prompts: [{ id, message }] })
 // instead of the dataset plus the benign set. Used for a held-out check of a fix.
 const promptsArg = args.find((a) => a.startsWith('--prompts='));
+// --name=<kind>: the file-name prefix under docs/results/ (default guardrail-drafts), so a
+// run of a different prompt set is not mistaken for the guardrail sample.
+const nameArg = args.find((a) => a.startsWith('--name='));
+const recordName = nameArg ? nameArg.slice('--name='.length).replace(/[^A-Za-z0-9-]/g, '') : 'guardrail-drafts';
 const analyzeArg = args.find((a) => a.startsWith('--analyze='));
 const labelsArg = args.find((a) => a.startsWith('--labels='));
 
@@ -103,6 +107,11 @@ async function runCapture() {
       entry.finalReply = result.body.reply;
       entry.toolsUsed = result.body.toolsUsed;
       entry.signals = result.body.signals.map((s) => s.type);
+      // Checked here, before redaction: redacting the key from the saved file would
+      // otherwise hide a leak. The model is never given the key, so this should be
+      // false every time; the check is what makes that a finding rather than a hope.
+      entry.containsSecret = secrets.some((secret) => `${entry.draft}
+${entry.finalReply}`.includes(secret));
       entry.usage = result.usage ? { calls: result.usage.calls, totalTokens: result.usage.totalTokens, latencyMs: result.usage.latencyMs } : null;
       consecutiveFailures = 0;
     } else {
@@ -122,7 +131,7 @@ async function runCapture() {
   let json = JSON.stringify({ meta: { date: new Date().toISOString(), provider: config.llmProvider, model, datasetVersion, benignPromptsVersion: benignVersion, promptsFile: promptsFile ?? null, delayMs: delay, modelCalls: calls }, aborted, prompts: out }, null, 2);
   for (const secret of secrets) json = json.split(secret).join('[redacted]');
   if (record) {
-    const file = recordedPath('guardrail-drafts', model);
+    const file = recordedPath(recordName, model);
     fs.writeFileSync(file, json + '\n');
     console.log(`Recorded ${path.relative(process.cwd(), file)}`);
   }
