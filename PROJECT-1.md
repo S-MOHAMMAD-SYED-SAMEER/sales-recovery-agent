@@ -183,8 +183,9 @@ Stated plainly, not glossed over:
 
 Gated by real need, not built speculatively:
 
-- Catch unsupported statements of fact about the store that are not about discounts (the one violation
-  still missed), probably by requiring evidence for store-side statements generally.
+- Claim verification against the knowledge base: the code checks discount, stock, order-status and promotion
+  claims, while other product-fact claims (the one violation still missed was "we currently sell all our items
+  individually") rely on retrieval grounding. Planned for v1.1.
 - Run the Anthropic adapter once credits are available.
 - Replace the mock business tools with a real store API (Shopify or similar), with authentication,
   once there is an actual store to connect to.

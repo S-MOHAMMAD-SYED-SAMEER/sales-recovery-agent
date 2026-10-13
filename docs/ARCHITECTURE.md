@@ -205,6 +205,7 @@ flowchart TD
   count a match only if its clause is not a refusal, an offer, a conditional, or the agent saying it does not
   know. The clause is cut at commas and at *and / but / so / because*, so a refusal cannot excuse a claim in
   the next breath ("I can't promise it will last, but use SAVE20 for 20% off" is still blocked).
+- **Scope.** Guardrails enforce discount, stock, order-status and promotion claims in code. Other product-fact claims (how items are sold, materials, dimensions and so on) rely on retrieval grounding, not on a code check. Planned for v1.1: claim verification against the knowledge base.
 - **What this does and does not prove.** The check is that the *right tool ran*, not that the reply's number
   matches the tool's. It is a set of patterns over English text: it catches the shapes it was built for, and
   every round of fresh real drafts has found another shape. That is why the model is also told the rules in
@@ -255,6 +256,7 @@ failed case with no checks (it used to be graded on the text "[HTTP 502]", which
 
 ## 10. Not built
 
-No authentication, no real store or CRM, no payment handling, no human handoff (the fallback only says
+No code check for product-fact claims beyond discount, stock, order status and promotions (v1.1: verify claims
+against the knowledge base). No authentication, no real store or CRM, no payment handling, no human handoff (the fallback only says
 support can help), no streaming, no rate limiting per user (it is per IP, and behind a proxy all visitors
 share one bucket), no multi-language support. Hosting your own copy is described in [HOSTING.md](./HOSTING.md).
