@@ -7,6 +7,9 @@ import { validateReply } from '../guardrails/index.js';
 
 const router = Router();
 
+export const MAX_MESSAGE_CHARS = 2000;
+const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
 // Full pipeline as of M7: M2 memory, M3 tool-calling, M4 RAG, M5 proactive
 // signals + guardrails, all evaluated by M6's harness (server/src/eval/).
 const BASE_SYSTEM_PROMPT =
@@ -45,6 +48,22 @@ export async function handleChat({ sessionId, message }, deps = {}) {
 
   if (!sessionId || typeof message !== 'string' || !message.trim()) {
     return { status: 400, body: { error: 'sessionId and a non-empty message are required.' } };
+  }
+  // A string the store can key on, not an object or an arbitrarily long blob.
+  // The demo page sends crypto.randomUUID(), which fits.
+  if (typeof sessionId !== 'string' || !SESSION_ID_RE.test(sessionId)) {
+    return {
+      status: 400,
+      body: { error: 'sessionId must be 1-64 characters: letters, digits, "-" or "_".' },
+    };
+  }
+  // Every character is sent to the model on a real provider, so the length of
+  // a message is a cost and abuse limit, not just a UI nicety.
+  if (message.length > MAX_MESSAGE_CHARS) {
+    return {
+      status: 400,
+      body: { error: `message must be at most ${MAX_MESSAGE_CHARS} characters.` },
+    };
   }
 
   // Deliberately says nothing about which provider, which variable, or where
