@@ -4,6 +4,7 @@ import { generateReply as defaultGenerateReply } from '../llm/index.js';
 import { conversationStore as defaultConversationStore } from '../memory/index.js';
 import { detectSignals, buildSignalDirective } from '../signals/index.js';
 import { validateReply } from '../guardrails/index.js';
+import { formatUsage } from '../llm/usage.js';
 
 const router = Router();
 
@@ -96,6 +97,7 @@ export async function handleChat({ sessionId, message }, deps = {}) {
 
   let text;
   let toolsUsed;
+  let usage = null;
   try {
     const result = await generateReply({
       systemPrompt,
@@ -111,6 +113,7 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     }
     text = result.text;
     toolsUsed = result.toolsUsed || [];
+    usage = result.usage ?? null;
   } catch (err) {
     console.error('[chat] LLM provider error:', err);
     return {
@@ -141,7 +144,12 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     console.error('[chat] Failed to persist conversation history:', err.message);
   }
 
-  return { status: 200, body: { reply: finalReply, toolsUsed, signals } };
+  // Token counts and latency for this reply, when the provider reported them
+  // (the demo provider makes no model call). Numbers only. Returned beside the
+  // body, not in it: the API response the page reads is unchanged.
+  if (usage) console.log(`[chat] model usage: ${formatUsage(usage)}`);
+
+  return { status: 200, body: { reply: finalReply, toolsUsed, signals }, usage };
 }
 
 router.post('/chat', async (req, res) => {

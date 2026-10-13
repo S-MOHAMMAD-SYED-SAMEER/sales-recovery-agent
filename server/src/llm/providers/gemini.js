@@ -106,6 +106,7 @@ export function createGeminiProvider({
   temperature = DEFAULT_TEMPERATURE,
   sleep,
   random,
+  clock = () => performance.now(),
   log = console,
 }) {
   async function generateReply({ systemPrompt, messages, tools = [], executeTool }) {
@@ -120,8 +121,11 @@ export function createGeminiProvider({
     }));
 
     const callModel = async (contents) => {
+      const startedAt = clock();
+      let attempts = 0;
       const response = await withRetry(
         async () => {
+          attempts += 1;
           const result = await geminiClient.models.generateContent({
             model,
             config: {
@@ -147,10 +151,24 @@ export function createGeminiProvider({
         }
       );
       const { result: finalResponse, functionCalls } = response;
+      const meta = finalResponse.usageMetadata;
 
       return {
         text: finalResponse.text,
         functionCalls,
+        // Tokens as Gemini reports them (thinking tokens are counted apart from
+        // the visible reply) and wall-clock time for this call including any
+        // retries, so a slow, retried call shows up as slow.
+        usage: {
+          model,
+          inputTokens: meta?.promptTokenCount,
+          outputTokens: meta?.candidatesTokenCount,
+          thinkingTokens: meta?.thoughtsTokenCount,
+          totalTokens: meta?.totalTokenCount,
+          latencyMs: clock() - startedAt,
+          attempts,
+          finishReason: finalResponse.candidates?.[0]?.finishReason,
+        },
         // The model's own turn, verbatim. Gemini 3.x attaches an internal
         // thought_signature to functionCall parts that MUST be echoed back
         // unchanged on the next turn — reconstructing the part by hand from

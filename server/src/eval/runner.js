@@ -2,6 +2,7 @@ import { createDb } from '../memory/db.js';
 import { createConversationStore } from '../memory/conversationStore.js';
 import { handleChat } from '../routes/chat.js';
 import { evaluateCase, aggregateMetrics } from './metrics.js';
+import { combineUsage } from '../llm/usage.js';
 
 // Mock mode replays each case's own `mockResponse` instead of calling a
 // real LLM — this is what makes mock-mode runs deterministic and free, and
@@ -57,11 +58,16 @@ async function runCase(evalCase, { mode, generateReply }) {
     });
   }
 
-  return evaluateCase(evalCase, {
-    reply: result.body.reply,
-    toolsUsed: result.body.toolsUsed,
-    signals: result.body.signals,
-  });
+  // Tokens and latency of the model calls behind this reply: null in mock mode,
+  // where no model is called.
+  return {
+    ...evaluateCase(evalCase, {
+      reply: result.body.reply,
+      toolsUsed: result.body.toolsUsed,
+      signals: result.body.signals,
+    }),
+    usage: result.usage ?? null,
+  };
 }
 
 function sleep(ms) {
@@ -104,6 +110,8 @@ export async function runEvaluation({ dataset, mode = 'mock', generateReply, del
     datasetVersion: dataset.version,
     mode,
     ...summary,
+    // Run totals of the per-case usage: calls, tokens, time. Null in mock mode.
+    usage: combineUsage(caseResults.map((c) => c.usage)),
     cases: caseResults,
   };
 }

@@ -1,3 +1,5 @@
+import { summarizeUsage } from './usage.js';
+
 const DEFAULT_MAX_ITERATIONS = 3;
 
 // Provider-agnostic agent loop:
@@ -26,13 +28,17 @@ export async function runToolLoop({
 }) {
   let state = initialState;
   const toolsUsed = [];
+  // One record per model call, when the adapter reports it (modelResult.usage).
+  const modelCalls = [];
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
     const modelResult = await callModel(state);
+    if (modelResult.usage) modelCalls.push(modelResult.usage);
     const { text, functionCalls = [] } = modelResult;
 
     if (functionCalls.length === 0) {
-      return { text, toolsUsed };
+      const usage = summarizeUsage(modelCalls);
+      return { text, toolsUsed, ...(usage ? { usage } : {}) };
     }
 
     const outcomes = [];

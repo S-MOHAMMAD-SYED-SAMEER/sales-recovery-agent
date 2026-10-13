@@ -142,3 +142,19 @@ test('without a client the adapter says the key is missing', async () => {
     /ANTHROPIC_API_KEY is not set/
   );
 });
+
+test('records tokens, latency and the stop reason for each model call', async () => {
+  const ticks = [10, 260];
+  const client = fakeClient([{ ...textMessage('hi'), usage: { input_tokens: 90, output_tokens: 12 } }]);
+  const { generateReply } = provider(client, { clock: () => ticks.shift() });
+
+  const result = await generateReply({ systemPrompt: 's', messages: userTurn, executeTool: noTools });
+
+  assert.equal(result.usage.calls, 1);
+  assert.equal(result.usage.inputTokens, 90);
+  assert.equal(result.usage.outputTokens, 12);
+  assert.equal(result.usage.totalTokens, 102);
+  assert.equal(result.usage.latencyMs, 250);
+  assert.equal(result.usage.perCall[0].finishReason, 'end_turn');
+  assert.equal(result.usage.perCall[0].model, 'claude-test-model');
+});
