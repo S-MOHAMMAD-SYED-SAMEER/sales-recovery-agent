@@ -9,6 +9,7 @@
     "demo": "node scripts/demo.js",
     "test": "node --env-file=test/test.env --test",
     "ingest": "node scripts/ingest.js",
+    "smoke": "node scripts/smoke.js",
     "eval": "node scripts/eval.js",
     "eval:real": "node scripts/eval.js --real",
     "eval:real:judge": "node scripts/eval.js --real --judge"
