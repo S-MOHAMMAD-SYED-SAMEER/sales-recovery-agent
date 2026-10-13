@@ -46,5 +46,15 @@ export function createConversationStore(db) {
     insertMessageStmt.run(conversation.id, role, content);
   }
 
-  return { getOrCreateConversation, getHistory, saveMessage };
+  // Closing is the only thing here that touches `db` directly, and that is the
+  // point of having it: the prepared statements above do not keep the database
+  // object alive on Node 22, so a store built as
+  // createConversationStore(createDb(':memory:')) could have its database
+  // garbage-collected mid-use ("statement has been finalized"). Holding `db` in
+  // a closure that lives as long as the store prevents that.
+  function close() {
+    db.close();
+  }
+
+  return { getOrCreateConversation, getHistory, saveMessage, close };
 }
