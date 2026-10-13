@@ -21,8 +21,6 @@
 
 import { extractAnswer } from './demoExtract.js';
 
-export const isConfigured = true;
-
 const FALLBACK_TEXT =
   'This portfolio demo supports a fixed set of example customer-support scenarios. ' +
   'Please choose one of the suggested questions.';

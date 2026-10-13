@@ -272,7 +272,7 @@ test('memory keeps working across multiple turns that mix tool and non-tool ques
   );
 });
 
-// --- M4: RAG knowledge-base search, alongside M3's business tools ---
+// --- RAG knowledge-base search, alongside the business tools ---
 
 test('a shipping-policy question surfaces searchKnowledgeBase in toolsUsed', async () => {
   const store = freshStore();
@@ -347,7 +347,7 @@ test('RAG and business tools coexist correctly within one session, and memory st
   assert.equal(historyY[0].content, 'Hi');
 });
 
-// --- M5: proactive signals ---
+// --- proactive signals ---
 
 test('a normal question produces an empty signals array in the response', async () => {
   const store = freshStore();
@@ -431,7 +431,7 @@ test('signals reflect only the current message, not an earlier turn in the same 
   assert.deepEqual(second.body.signals, []);
 });
 
-// --- M5: guardrails ---
+// --- guardrails ---
 
 test('blocks a fabricated discount claim and returns the safe fallback instead', async () => {
   const store = freshStore();

@@ -1,7 +1,6 @@
-// OPTIONAL, subjective evaluator — NOT ground truth. This exists because
-// requirement M6.8 explicitly allows an isolated, clearly-labeled LLM
-// judge; it is never blended into metrics.js's deterministic numbers and
-// never affects a case's pass/fail. Off by default: only runs when the CLI
+// OPTIONAL, subjective evaluator — NOT ground truth. It is an isolated,
+// clearly-labeled LLM judge; it is never blended into metrics.js's
+// deterministic numbers and never affects a case's pass/fail. Off by default: only runs when the CLI
 // is given --judge, and only makes sense paired with --real (judging a
 // scripted mock reply against itself is not informative). Results land
 // under a separate `judge` key in the eval output, never inside `metrics`.

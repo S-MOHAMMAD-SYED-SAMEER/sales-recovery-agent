@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateReply, isConfigured } from '../src/llm/providers/demo.js';
+import { generateReply } from '../src/llm/providers/demo.js';
 import { businessTools, createToolExecutor } from '../src/tools/index.js';
 
 // A fake searchKnowledgeBase tool, shaped exactly like the real one
@@ -40,8 +40,23 @@ function realExecutor(kbExecute) {
 
 // --- provider contract & credential-free -----------------------------------
 
-test('demo provider requires no API key / credential of any kind', () => {
-  assert.equal(isConfigured, true);
+test('demo provider requires no API key / credential of any kind', async () => {
+  // The provider never reads a credential itself; the only gate is config's
+  // isConfigured, which has no required variable for LLM_PROVIDER=demo.
+  const names = ['LLM_PROVIDER', 'GEMINI_API_KEY', 'ANTHROPIC_API_KEY'];
+  const saved = Object.fromEntries(names.map((n) => [n, process.env[n]]));
+  try {
+    process.env.LLM_PROVIDER = 'demo';
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    const config = await import('../src/config/env.js?demo-needs-no-key');
+    assert.equal(config.isConfigured, true);
+  } finally {
+    for (const n of names) {
+      if (saved[n] === undefined) delete process.env[n];
+      else process.env[n] = saved[n];
+    }
+  }
 });
 
 test('follows the same generateReply({systemPrompt, messages, tools, executeTool}) contract as the real providers', async () => {

@@ -35,7 +35,7 @@ connection that time.
 
 | | Status |
 |---|---|
-| Automated tests | **348 tests, all passing** (`cd server && npm test`). No API key, no Chroma and no network needed |
+| Automated tests | **349 tests, all passing** (`cd server && npm test`). No API key, no Chroma and no network needed |
 | Evaluation, mock mode | **21/21** (`npm run eval`). The mock replays each case's own scripted answer, so it checks the harness and the code around the model (guardrails, signals, memory, grading), **not a model** |
 | Evaluation, real model | **To be re-run.** An earlier run on Gemini was reported but its output was not kept, so no result is claimed here. `npm run eval:real` produces a recorded one |
 | Gemini adapter | Implemented and unit-tested against a fake client. The live call path has not been exercised since the adapter was hardened |

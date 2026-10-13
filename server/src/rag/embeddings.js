@@ -4,10 +4,9 @@ const MODEL = 'Xenova/all-MiniLM-L6-v2';
 
 // Local, in-process embeddings — no external API, no API key, no per-call
 // cost. Model weights (~90MB) download once from the Hugging Face Hub on
-// first use and are cached under the OS cache dir afterward. Same reasoning
-// as the M1 architecture proposal: avoids adding a second paid vendor for a
-// knowledge base of a handful of short documents, where a hosted embeddings
-// API's quality edge wouldn't be visible.
+// first use and are cached under the OS cache dir afterward. Avoids adding a
+// second paid vendor for a knowledge base of a handful of short documents,
+// where a hosted embeddings API's quality edge wouldn't be visible.
 let embedderPromise;
 function getEmbedder() {
   if (!embedderPromise) {

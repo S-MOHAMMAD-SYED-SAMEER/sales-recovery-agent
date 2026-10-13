@@ -73,8 +73,8 @@ test('running the same dataset twice in mock mode produces identical results (re
 });
 
 test('a case missing mockResponse in mock mode is graded as a failure, not silently skipped', async () => {
-  // handleChat itself never leaks a raw provider error (by design, since
-  // M1) — a missing mockResponse surfaces as a normal 502-style fallback
+  // handleChat itself never leaks a raw provider error (by design) — a
+  // missing mockResponse surfaces as a normal 502-style fallback
   // reply, which then correctly fails this case's own expectation rather
   // than the run crashing or the case being silently dropped.
   const dataset = {

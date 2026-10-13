@@ -5,8 +5,6 @@ import { LlmResponseError, withRetry } from '../resilience.js';
 
 const client = config.geminiApiKey ? new GoogleGenAI({ apiKey: config.geminiApiKey }) : null;
 
-export const isConfigured = Boolean(client);
-
 // Gemini 3.x is documented to behave best at its default temperature of 1.0, so
 // that is the explicit default here rather than a lower "more deterministic"
 // value. LLM_TEMPERATURE overrides it. Worth re-checking against the live API.
