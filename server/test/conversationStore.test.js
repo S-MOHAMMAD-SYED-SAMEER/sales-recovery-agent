@@ -63,3 +63,12 @@ test('getHistory keeps only the most recent `limit` messages, still in chronolog
     { role: 'user', content: 'msg-5' },
   ]);
 });
+
+test('close() releases the database, and the store keeps working right up until then', () => {
+  const store = createConversationStore(createDb(':memory:'));
+  store.saveMessage('s', 'user', 'hello');
+  assert.deepEqual(store.getHistory('s'), [{ role: 'user', content: 'hello' }]);
+
+  store.close();
+  assert.throws(() => store.getHistory('s'));
+});

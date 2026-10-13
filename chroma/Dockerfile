@@ -7,7 +7,12 @@
 # Render's "build from Dockerfile" flow has something in the repo to point
 # at. It adds nothing on top of the upstream image; CMD/ENTRYPOINT are
 # inherited as-is from chromadb/chroma, not reimplemented here.
-FROM chromadb/chroma:latest
+#
+# Pinned, not :latest: 1.5.9 is the server this project was tested with (the
+# `chromadb` JS client in server/package-lock.json is 3.5.0, and local runs use
+# `pip install chromadb==1.5.9`). A server upgrade can break the client, so bump
+# the image, the pip pin in the README and the client together, and re-test.
+FROM chromadb/chroma:1.5.9
 
 # Chroma's own Dockerfile sets CHROMA_HOST_ADDR=0.0.0.0 and
 # CHROMA_HOST_PORT=8000 by default — it already binds all interfaces on the

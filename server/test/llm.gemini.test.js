@@ -83,9 +83,17 @@ test('sends the configured model, token cap, temperature, system prompt and an a
 });
 
 test('a request that never answers is aborted by the timeout, then retried and finally failed', async () => {
+  // A request that never settles by itself. AbortSignal.timeout's timer does not
+  // keep the process alive, so on some Node versions the event loop would exit
+  // with this promise pending; a keep-alive interval stands in for the open
+  // socket a real hung request would have.
   const hang = (request) =>
     new Promise((resolve, reject) => {
-      request.config.abortSignal.addEventListener('abort', () => reject(request.config.abortSignal.reason));
+      const keepAlive = setInterval(() => {}, 1000);
+      request.config.abortSignal.addEventListener('abort', () => {
+        clearInterval(keepAlive);
+        reject(request.config.abortSignal.reason);
+      });
     });
   const client = fakeClient([hang, hang]);
   const { generateReply, sleeps } = provider(client, { timeoutMs: 15, maxRetries: 1 });

@@ -1,0 +1,56 @@
+name: CI
+
+# Every push to any branch, and every pull request. Nothing here needs an API key,
+# a running Chroma server or the network at test time: the tests use fake model
+# clients and a fake vector store, and the evaluation runs in its scripted mock mode.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to the same ref cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor in package.json "engines" (node:sqlite needs 22.13+), and current.
+        node-version: ['22.13.0', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # Mock mode: replays each case's scripted answer through the real signals,
+      # guardrails, memory and grading. It checks the harness, not a model.
+      - run: npm run eval
+
+  audit:
+    name: npm audit (high and above)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=high
