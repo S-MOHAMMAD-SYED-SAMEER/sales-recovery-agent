@@ -1,0 +1,4 @@
+# Text files are stored and checked out with LF, whatever the OS. Without this a
+# Windows checkout turns the knowledge-base documents into CRLF, which then show
+# up inside the chunks the retriever hands to the model.
+* text=auto eol=lf

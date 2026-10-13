@@ -19,6 +19,8 @@
 // fixed regex/keyword check with a fixed reply template, so the same input
 // always produces the same output.
 
+import { extractAnswer } from './demoExtract.js';
+
 export const isConfigured = true;
 
 const FALLBACK_TEXT =
@@ -175,9 +177,12 @@ async function respondKnowledgeBase(query, executeTool) {
   const { result } = outcome;
 
   if (result.found) {
-    // The knowledge-base chunk's own text — real, committed store content,
-    // not generated here. See server/data/kb/*.md.
-    return { text: result.results[0].text, toolsUsed: ['searchKnowledgeBase'] };
+    // The sentence(s) of the retrieved chunks that best answer the question,
+    // word for word — real, committed store content, nothing generated here
+    // (see ./demoExtract.js and server/data/kb/*.md). The chunk's heading line
+    // is retrieval metadata and is not shown.
+    const answer = extractAnswer(query, result.results);
+    if (answer) return { text: answer, toolsUsed: ['searchKnowledgeBase'] };
   }
 
   // Two distinct "no answer" cases from the tool (see
