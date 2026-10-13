@@ -4,7 +4,7 @@ A case study. Full technical documentation lives in [README.md](./README.md); th
 condensed version — what problem it solves, how it's built, the decisions behind it, and what it
 actually achieves, measured rather than claimed.
 
-**Status: code complete; the real-model evaluation is still to be re-run.** It runs locally with one
+**Status: code complete and evaluated on a real model (Gemini); the Anthropic adapter is still unrun.** It runs locally with one
 command (see "Run it locally" in the README), on synthetic data and a credential-free demo provider.
 There is no real store connected and no payment processing — see "Known limitations" below for the
 full list of what this is not, and "Results" for exactly what has and has not been measured.
@@ -35,8 +35,8 @@ An AI support agent that:
    bot**: stating something false about an order, a price, a policy, or making a promise (a refund)
    it has no way to actually fulfill.
 6. **Is measured, not just demoed** — a versioned evaluation suite checks all of the above against
-   21 representative cases, including injection and refusal attempts. It runs in a scripted mock
-   mode today; a recorded run against a real model is still to be done.
+   21 representative cases, including injection and refusal attempts, in a scripted mock mode and
+   on a real model (two recorded runs on Gemini, below).
 
 ## Architecture
 
@@ -107,14 +107,16 @@ not a preemptive upgrade.
 A system prompt is a request the model can still get wrong. The guardrails (`guardrails/policies.js`)
 are pure functions that check the model's actual reply against what tools genuinely ran that turn —
 enforced regardless of whether the model followed its instructions. The honest caveat is that they
-are regexes: they can block a good answer as well as a bad one. An earlier screenshot of a real
-Gemini reply to "I'm still deciding" shows the fallback firing on a reply that probably did not
-need it, and which policy fired was not recorded. Measuring that false-positive rate against a real
-model is part of the remaining work.
+are regexes, and on a real model they were wrong in both directions. They **blocked good replies**: a
+refusal that repeated "50% off" and an offer to "check if something is in stock" (the "I'm still deciding"
+misfire), 2 of 41 drafts (4.9%). Reading the model's drafts showed both were harmless, and the policies
+now count a match only when it is not a refusal, an offer or a conditional (0/41 afterwards, 0/13 on 15
+held-out prompts). They also **missed** two replies that asserted promotions no tool supports, because
+the discount policy only recognises a percentage or a code. That gap is open.
 
 ## Evaluation methodology
 
-A 21-case, versioned dataset (`server/eval/dataset.json`, v1.1.0) covering RAG, tool-calling,
+A 21-case, versioned dataset (`server/eval/dataset.json`, v1.2.0) covering RAG, tool-calling,
 signals, safety (including five injection and refusal attempts), memory, and mixed scenarios.
 Metrics are deterministic (set comparison for tools/signals, keyword presence for groundedness,
 regex for forbidden content) — never an LLM's subjective opinion presented as ground truth. An
@@ -126,19 +128,27 @@ provider, with tokens and latency recorded per case).
 
 ## Results
 
-Measured directly, not estimated:
+Measured directly, and recorded in `docs/results/` (see its `2026-10-13-summary.md`):
 
-- **349** automated tests, all passing, offline (no key, no Chroma, no network).
-- **21/21** evaluation cases pass in mock mode: tool selection 14/14, signal detection 16/16,
-  grounded answers 11/11, unsupported answers 1/1, guardrail/safety 10/10, hallucination 0/18. A
-  mock run replays scripted answers, so this is a regression check on the harness and the
-  surrounding code. **It is not a measurement of a model.**
+- **367** automated tests, all passing, offline (no key, no Chroma, no network).
+- **Mock evaluation: 21/21.** A mock run replays scripted answers, so this is a regression check on the
+  harness and the surrounding code. It is not a measurement of a model.
+- **Real evaluation, `gemini-3.5-flash-lite`, 2026-10-13, two independent runs of the 21 cases.**
+  Run 1: **18/21 (85.7%)** under the grader as it was; the three failures were correct replies that the
+  grader mis-scored ("30-day" against the keyword "30 days"; "I'm not finding any information" missing from
+  the honesty phrases; a correct denial that quoted "90-day" tripping a forbidden string). Those are fixed
+  (dataset 1.2.0, with tests). Run 2, a fresh set of replies on the corrected grader: **21/21**: tool
+  selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10. About 34 calls and 29,000
+  tokens each. Fixing a grader after seeing it fail is a risk, which is why the second run was kept.
+- **Prompt injection, 10 new attempts on the real model: 10/10 held**, and the API key was in none of the
+  replies.
+- **Guardrails:** false positives 2/41 → 0/41, and 0/13 on held-out prompts; one known false-negative gap
+  (above).
+- **Free tier:** 15 generate requests a minute for this model, read from a real 429; the adapter does not
+  hold a reply for a longer wait.
 
-**Not measured yet:** any run against a real model. An earlier Gemini run was reported at 16/16 on
-the original 16 cases, and it found a real grading bug (a typographic en dash in "7–12 business
-days" failed a hyphen-only keyword check, now normalised and covered by a test), but the output of
-that run was not kept, so no real-model figure is claimed here. `npm run eval:real` produces a
-recorded one.
+What this does not show: 21 cases and 10 attacks are a smoke test, not coverage of real customers; one model
+was run; a live model varies run to run; the labels on the guardrail drafts are one reviewer's.
 
 ## Known limitations
 
@@ -158,16 +168,16 @@ Stated plainly, not glossed over:
   they can over-block.
 - **The evaluation dataset is a 21-case smoke test**, not statistically powered coverage of real
   customer phrasing.
-- **Model providers.** Gemini (free tier, `gemini-3.5-flash-lite`) is the default; the Claude
-  Haiku 4.5 named in the original brief is implemented as the second provider and has **not yet been
-  run** against the live API. A live model is not perfectly reproducible, so a future real-run
-  result will describe that run.
+- **Model providers.** Gemini (free tier, `gemini-3.5-flash-lite`) is the default and has been run;
+  the Claude Haiku 4.5 named in the original brief is implemented as the second provider and has **not
+  yet been run** against the live API. A live model is not perfectly reproducible, so the real-run
+  figures describe those runs.
 
 ## Future improvements
 
 Gated by real need, not built speculatively:
 
-- Record a real-model evaluation run, and measure the guardrails' false-positive rate with it.
+- Close the guardrails' false-negative gap for unsupported promotion claims (and re-measure).
 - Run the Anthropic adapter once credits are available.
 - Replace the mock business tools with a real store API (Shopify or similar), with authentication,
   once there is an actual store to connect to.

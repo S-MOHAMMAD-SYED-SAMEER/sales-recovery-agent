@@ -98,8 +98,9 @@ Steps marked **[YOU]** need your own account, payment method or credential.
   notices an empty collection the next time a question needs it and re-ingests before answering
   (`server/src/rag/demoKnowledgeBase.js`). For durable vector storage, attach a Render Disk at
   `/data` on the Chroma service (a paid feature).
-- **Gemini free-tier limits apply** (requests per minute and per day). The figures for the current
-  model are not verified in this repo; check your project's quota in Google AI Studio. On a 429
+- **Gemini free-tier limits apply.** For `gemini-3.5-flash-lite` the free tier allows 15 generate
+  requests per minute (read from a real 429 on 2026-10-13; the daily limit was not reached or measured).
+  Check your project's quota in Google AI Studio. On a 429
   the app retries up to `LLM_MAX_RETRIES` times, waiting what the server asks for or a short
   backoff, but if the server asks for more than 15 s it gives up at once and the customer gets an
   error message.
