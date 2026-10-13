@@ -1,6 +1,6 @@
 # Chroma server for the sales-recovery-agent's RAG vector store, deployed as
 # its own Render Web Service, separate from the main app. See
-# ../DEPLOYMENT.md for the exact Render configuration (root directory, port,
+# ../docs/HOSTING.md for the exact Render configuration (root directory, port,
 # env vars) and how the main app's CHROMA_HOST/CHROMA_PORT must point here.
 #
 # This is the official Chroma image, unmodified — this file exists only so

@@ -4,9 +4,10 @@ A case study. Full technical documentation lives in [README.md](./README.md); th
 condensed version — what problem it solves, how it's built, the decisions behind it, and what it
 actually achieves, measured rather than claimed.
 
-**Status: complete.** It runs locally with one command (see "Run it locally" in the README), on
-synthetic data and a credential-free demo provider. There is no real store connected and no
-payment processing — see "Known limitations" below for the full list of what this is not.
+**Status: code complete; the real-model evaluation is still to be re-run.** It runs locally with one
+command (see "Run it locally" in the README), on synthetic data and a credential-free demo provider.
+There is no real store connected and no payment processing — see "Known limitations" below for the
+full list of what this is not, and "Results" for exactly what has and has not been measured.
 
 ## Problem
 
@@ -34,7 +35,8 @@ An AI support agent that:
    bot**: stating something false about an order, a price, a policy, or making a promise (a refund)
    it has no way to actually fulfill.
 6. **Is measured, not just demoed** — a versioned evaluation suite checks all of the above against
-   16 representative cases, with a real run against the live model, not only mocked stand-ins.
+   21 representative cases, including injection and refusal attempts. It runs in a scripted mock
+   mode today; a recorded run against a real model is still to be done.
 
 ## Architecture
 
@@ -81,12 +83,12 @@ prompt.
 
 ### Why Chroma
 The brief locks RAG to Chroma or Qdrant. Both require a running server for their Node clients —
-there's no pure-JS embedded mode for either. This machine has no Docker (the usual way to
-self-host), so the real choice was: what can actually be stood up locally, reliably, for free,
-right now? Chroma's Python package ships a one-line local dev server (`chroma run`); the
-alternative — a self-hosted Qdrant without Docker — would have meant trusting an unsigned binary
-download. Qdrant Cloud's free tier was considered and set aside because this is explicitly a
-local-dev decision; production hosting is a separate, later question.
+there's no pure-JS embedded mode for either. Docker is the usual way to self-host, but the real
+question was what can be stood up locally with the least ceremony, for free. Chroma's Python
+package ships a one-line local dev server (`chroma run`), which `npm run demo` starts for you; a
+self-hosted Qdrant without Docker would have meant trusting an unsigned binary download. Qdrant
+Cloud's free tier was set aside because this is a local-dev decision; production hosting is a
+separate, later question (see `docs/HOSTING.md`). Tested with Chroma 1.5.9.
 
 ### Why SQLite for memory
 Single small server process, low concurrency, zero infrastructure to provision, trivial to inspect
@@ -104,73 +106,72 @@ not a preemptive upgrade.
 ### Why guardrails are application code, not just a system prompt
 A system prompt is a request the model can still get wrong. The guardrails (`guardrails/policies.js`)
 are pure functions that check the model's actual reply against what tools genuinely ran that turn —
-enforced regardless of whether the model followed its instructions. This mattered in practice: the
-evaluation run's real log shows one case where the model's first draft mentioned an unverified
-discount and the guardrail caught and replaced it before it reached persistence — the backstop
-firing for real, not just existing in theory.
+enforced regardless of whether the model followed its instructions. The honest caveat is that they
+are regexes: they can block a good answer as well as a bad one. An earlier screenshot of a real
+Gemini reply to "I'm still deciding" shows the fallback firing on a reply that probably did not
+need it, and which policy fired was not recorded. Measuring that false-positive rate against a real
+model is part of the remaining work.
 
 ## Evaluation methodology
 
-A 16-case, versioned dataset (`server/eval/dataset.json`) covering RAG, tool-calling, signals,
-safety/guardrails, memory, and mixed scenarios. Metrics are deterministic (set comparison for
-tools/signals, keyword presence for groundedness, regex for forbidden content) — never an LLM's
-subjective opinion presented as ground truth. An optional LLM judge exists, clearly isolated and
-labeled subjective, off by default.
+A 21-case, versioned dataset (`server/eval/dataset.json`, v1.1.0) covering RAG, tool-calling,
+signals, safety (including five injection and refusal attempts), memory, and mixed scenarios.
+Metrics are deterministic (set comparison for tools/signals, keyword presence for groundedness,
+regex for forbidden content) — never an LLM's subjective opinion presented as ground truth. An
+optional LLM judge exists, clearly isolated and labeled subjective, off by default.
 
-Two run modes: **mock** (scripted responses, free, always reproducible — validates the harness
-itself) and **real** (the actual configured provider — validates the agent).
+Two run modes: **mock** (each case replays its own scripted response: free, reproducible, and it
+validates the harness and the code around the model, not the model) and **real** (the configured
+provider, with tokens and latency recorded per case).
 
 ## Results
 
 Measured directly, not estimated:
 
-- **247** automated unit/integration tests in the current suite (static count; last verified
-  passing per the commit that introduced the current total — see README's "Tests" section for
-  what it covers).
-- **16/16** evaluation cases passing in deterministic mock mode — 100% on every metric
-  (tool-selection accuracy, signal-detection accuracy, grounded-answer accuracy, unsupported-answer
-  accuracy, guardrail/safety pass rate; 0% hallucination rate).
-- **16/16** evaluation cases passing in a real run against the live Gemini model — same 100% across
-  every metric, after fixing two real issues that specific run surfaced (see README's "Evaluation
-  harness (M6)" section for the details: a genuine guardrail intervention, and a keyword-matching
-  bug around a Unicode dash character that a mock-only run could never have found).
+- **348** automated tests, all passing, offline (no key, no Chroma, no network).
+- **21/21** evaluation cases pass in mock mode: tool selection 14/14, signal detection 16/16,
+  grounded answers 11/11, unsupported answers 1/1, guardrail/safety 10/10, hallucination 0/18. A
+  mock run replays scripted answers, so this is a regression check on the harness and the
+  surrounding code. **It is not a measurement of a model.**
 
-These numbers describe this 16-case dataset on this run, not a general accuracy claim — see
-limitations below.
+**Not measured yet:** any run against a real model. An earlier Gemini run was reported at 16/16 on
+the original 16 cases, and it found a real grading bug (a typographic en dash in "7–12 business
+days" failed a hyphen-only keyword check, now normalised and covered by a test), but the output of
+that run was not kept, so no real-model figure is claimed here. `npm run eval:real` produces a
+recorded one.
 
 ## Known limitations
 
 Stated plainly, not glossed over:
 
-- **No hosted instance.** It is run locally; the README and `DEPLOYMENT.md` describe how to host
-  your own. Running it needs a local Chroma server, and a configured API key unless the
-  credential-free `demo` provider is used.
+- **No hosted instance.** It is run locally; `docs/HOSTING.md` describes how to host your own.
+  Running it needs a local Chroma server, and a configured API key unless the credential-free `demo`
+  provider is used.
 - **All order/stock/discount/knowledge-base data is fictional**, hardcoded for demonstration — not
   connected to a real store, inventory system, or CRM. The UI states this explicitly.
-- **No authentication, no payment processing, no real refund/compensation capability** — the agent
-  can discuss policy but has no tool that could actually issue one.
+- **No authentication, no payment processing, no real refund or human handoff** — the agent can
+  discuss policy but has no tool that could issue a refund or connect a person, and anyone can look
+  up any order number.
 - **Signal detection is keyword/regex-based**, English-only, and will miss indirect phrasing.
-- **Guardrails are pattern-based**, not a full fact-checker — they confirm the right category of
-  tool ran before a claim of that type is allowed through, not that every value in the reply is
-  numerically correct.
-- **The evaluation dataset is a 16-case smoke test**, chosen to cover each required category once,
-  not statistically powered coverage of real customer phrasing at scale.
-- **Dev-time model is Gemini** (free tier), not the Claude Haiku 4.5 specified in the original
-  brief — an explicitly approved, documented swap made because the Anthropic account has no prepaid
-  credits yet. The Anthropic adapter is fully implemented and switching back is a one-line env var
-  change, not a code change.
-- **A live model is not perfectly reproducible** — the real evaluation run's 100% result describes
-  that run; a live model can vary between runs in ways the deterministic mock suite, by design,
-  cannot.
+- **Guardrails are pattern-based**, not a fact-checker — they confirm the right category of tool ran
+  before a claim of that type is allowed through, not that every value in the reply is correct, and
+  they can over-block.
+- **The evaluation dataset is a 21-case smoke test**, not statistically powered coverage of real
+  customer phrasing.
+- **Model providers.** Gemini (free tier, `gemini-3.5-flash-lite`) is the default; the Claude
+  Haiku 4.5 named in the original brief is implemented as the second provider and has **not yet been
+  run** against the live API. A live model is not perfectly reproducible, so a future real-run
+  result will describe that run.
 
 ## Future improvements
 
-Gated by real need, not built speculatively (per this project's own operating rules):
+Gated by real need, not built speculatively:
 
-- Switch the dev-time default back to Claude Haiku 4.5 once Anthropic credits are added.
-- Replace the mock business tools with a real store API (Shopify or similar) once there's an actual
-  store to connect to.
+- Record a real-model evaluation run, and measure the guardrails' false-positive rate with it.
+- Run the Anthropic adapter once credits are available.
+- Replace the mock business tools with a real store API (Shopify or similar), with authentication,
+  once there is an actual store to connect to.
 - Expand the evaluation dataset as real usage surfaces new cases worth locking in as regression
   tests.
-- Consider upgrading signal detection beyond regex only if real conversations show it's missing
+- Consider upgrading signal detection beyond regex only if real conversations show it is missing
   signals that would have mattered.
