@@ -78,6 +78,58 @@ function hasClaim(text, re, isMention) {
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// Promotions without a number or a code.
+//
+// The discount pattern above needs a percentage or a code-shaped word. A real model
+// also says things like "we occasionally run promotions or offer sign-up
+// discounts" or "we do not have any automatic promotions running right now",
+// which name no number and no code, and those got through (2 of 2 in the held-out
+// sample, docs/results/). Neither the knowledge base nor any tool says anything
+// about promotions, so each such statement, a denial included, is made up.
+//
+// The nouns are deliberately narrow. "Discount code" and "coupon code" are not
+// matched (a customer's code is something the agent may talk about and check),
+// and neither is "final-sale" or "clearance items", which the return policy uses.
+// What does not count as a claim: a conditional or an offer to check ("if there
+// are any current promotions"), and the agent saying what *it* cannot do ("I can't
+// apply a discount myself"). A store-side denial ("we don't have any promotions")
+// is not an inability and is still blocked.
+//
+// Saying that it does NOT know is the opposite of a claim, and is the behaviour the
+// system is built to produce: "I don't have information on a summer sale", "I'm not
+// showing any active promotions", "our knowledge base doesn't mention any". A first
+// version of this check, written from two drafts, blocked exactly those (5 of 11
+// answered drafts in a fresh sample), because it only excused the agent's inability to
+// *act*. The line it now draws is who is speaking about what: the agent about what it
+// knows or can see (excused), versus the store about what it has or does (a claim,
+// blocked unless checkDiscount ran).
+// ---------------------------------------------------------------------------
+const PROMOTION_CLAIM_RE =
+  /\b(?:promotional|promotions?|promos?(?![\s-]*codes?)|discounts?(?![\s-]*(?:codes?|coupons?))|coupons?(?![\s-]*codes?)|special offers?|(?:flash|seasonal|holiday|clearance|summer|winter|weekend) sales?|sign[- ]?up (?:offers?|bonus(?:es)?))\b/i;
+const FIRST_PERSON_INABILITY_RE =
+  /\bI(?:'m| am)?\b[^.!?]*\b(?:can(?:'|’)?t|cannot|can not|unable|not able|not allowed|not permitted|don(?:'|’)?t have the ability|won(?:'|’)?t)\b/i;
+
+// "Promotions aren't something I can promise": the agent's own limit, said after the noun.
+const NOT_SOMETHING_I_CAN_RE =
+  /\b(?:isn(?:'|’)?t|aren(?:'|’)?t|is not|are not)\s+(?:something|possible|available)\b[^.!?]*\bI\b/i;
+
+// The agent speaking about what it knows or can see: "I don't have any information on",
+// "I'm not showing", "I couldn't find", "I'm not sure". The subject has to be "I".
+const FIRST_PERSON_NOT_KNOWN_RE =
+  /\bI(?:'m| am)?\b[^.!?]*\b(?:don(?:'|’)?t|do not|doesn(?:'|’)?t|couldn(?:'|’)?t|could not|can(?:'|’)?t|cannot|not|unable)\b[^.!?]*\b(?:have|find|finding|found|see|seeing|know|show|showing|aware|sure|certain|information|record|listing)\b/i;
+// A source reported as silent: "our knowledge base doesn't mention any", "not listed".
+const SOURCE_SILENT_RE =
+  /\b(?:knowledge base|store information|store policies|policies|policy|records?|system|information)\b[^.!?]*\b(?:doesn(?:'|’)?t|does not|don(?:'|’)?t|do not|didn(?:'|’)?t|did not|has no|have no|contains? no|lists? no|isn(?:'|’)?t|is not)\b[^.!?]*\b(?:mentions?|lists?|says?|includes?|contains?|covers?|shows?|states?|have|specif(?:y|ies))\b|\bnot (?:mentioned|listed|covered|stated|specified)\b/i;
+
+const isPromotionMention = (prefix, suffix) =>
+  OFFER_OR_CONDITIONAL_RE.test(prefix) ||
+  FIRST_PERSON_NOT_KNOWN_RE.test(prefix) ||
+  SOURCE_SILENT_RE.test(prefix) ||
+  FIRST_PERSON_INABILITY_RE.test(prefix) ||
+  FIRST_PERSON_INABILITY_RE.test(suffix) ||
+  NOT_SOMETHING_I_CAN_RE.test(suffix);
+
 const isDiscountMention = (prefix, suffix) =>
   NEGATION_BEFORE_RE.test(prefix) || NEGATION_AFTER_RE.test(suffix) || OFFER_OR_CONDITIONAL_RE.test(prefix);
 const isStockMention = (prefix) => OFFER_OR_CONDITIONAL_RE.test(prefix);
@@ -85,10 +137,15 @@ const isStockMention = (prefix) => OFFER_OR_CONDITIONAL_RE.test(prefix);
 export const POLICIES = [
   {
     name: 'no_unverified_discount_claim',
-    description: 'Do not state or imply a discount/code/percent-off unless checkDiscount ran this turn.',
+    description:
+      'Do not state or imply a discount, code, percent-off or promotion (including that there is none) unless checkDiscount ran this turn.',
     check({ reply, toolsUsed }) {
-      if (!usedTool(toolsUsed, 'checkDiscount') && hasClaim(reply, DISCOUNT_CLAIM_RE, isDiscountMention)) {
+      if (usedTool(toolsUsed, 'checkDiscount')) return null;
+      if (hasClaim(reply, DISCOUNT_CLAIM_RE, isDiscountMention)) {
         return 'Reply mentions a discount/code/percent-off without checkDiscount having run this turn.';
+      }
+      if (hasClaim(reply, PROMOTION_CLAIM_RE, isPromotionMention)) {
+        return 'Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn.';
       }
       return null;
     },

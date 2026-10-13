@@ -16,6 +16,8 @@ is edited by hand.
 | `YYYY-MM-DD-guardrail-analysis-<model>*.json` | `guardrail-fp.js --analyze --record` | False-positive and false-negative rates of the guardrails against the labels, before and after a change |
 | `YYYY-MM-DD-rate-limit-probe-<model>.json` | `rate-limit-probe.js --record` | A controlled burst: what the free tier did and what the adapter did about it |
 | `YYYY-MM-DD-injection-run-<model>.json`, `*-injection-review.json` | `guardrail-fp.js --capture --prompts=eval/injection-prompts.json --name=injection-run` | Ten injection attempts on the real model, and a hand verdict on each |
+| `YYYY-MM-DD-promotion-run*.json`, `*-promotion-labels*.json`, `*-promotion-fix-analysis-set*.json` | `guardrail-fp.js` (capture, then analyze) | Fresh promotion and discount prompts on the real model, the hand labels, and the false-positive / false-negative rates of the final policy on every draft on file |
+| `YYYY-MM-DD-promotion-gap.md` | by hand | How the promotion-claim gap was closed, step by step, including the version that failed on fresh data |
 | `YYYY-MM-DD-summary.md` | by hand | What the runs of that day add up to |
 
 Mock-mode evaluation output is **not** kept here: it replays scripted answers and says nothing

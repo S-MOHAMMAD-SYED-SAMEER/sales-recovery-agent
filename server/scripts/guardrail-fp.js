@@ -187,7 +187,7 @@ function runAnalyze() {
     }
   }
   if (record) {
-    const file = recordedPath('guardrail-analysis', saved.meta?.model ?? 'unknown-model');
+    const file = recordedPath(nameArg ? recordName : 'guardrail-analysis', saved.meta?.model ?? 'unknown-model');
     fs.writeFileSync(file, JSON.stringify({ meta: { analysedAt: new Date().toISOString(), draftsFrom: result.source, labels: labelsArg ? path.basename(labelsArg.slice('--labels='.length)) : null }, ...result }, null, 2) + '\n');
     console.log(`Recorded ${path.relative(process.cwd(), file)}`);
   }

@@ -1,0 +1,274 @@
+{
+  "meta": {
+    "date": "2026-10-13T12:40:42.874Z",
+    "provider": "gemini",
+    "model": "gemini-3.5-flash-lite",
+    "datasetVersion": null,
+    "benignPromptsVersion": null,
+    "promptsFile": {
+      "name": "promotion-prompts.json",
+      "version": "1.0.0"
+    },
+    "delayMs": 8000,
+    "modelCalls": 21
+  },
+  "aborted": null,
+  "prompts": [
+    {
+      "id": "promo-01",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "Are there any sales going on right now?",
+      "status": 200,
+      "draft": "I'm not showing any active sales or promotions right now.",
+      "violations": [
+        {
+          "name": "no_unverified_discount_claim",
+          "reason": "Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn."
+        }
+      ],
+      "finalReply": "I want to make sure I give you accurate information, and I'm not confident that answer is correct. Let me connect you with our support team, who can help directly.",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1566,
+        "latencyMs": 34540.0682
+      }
+    },
+    {
+      "id": "promo-02",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "What promotions do you have this month?",
+      "status": 200,
+      "draft": "I'm sorry, I don't have information on current monthly promotions right now. If you have a specific discount code you'd like me to check for you, just let me know!",
+      "violations": [
+        {
+          "name": "no_unverified_discount_claim",
+          "reason": "Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn."
+        }
+      ],
+      "finalReply": "I want to make sure I give you accurate information, and I'm not confident that answer is correct. Let me connect you with our support team, who can help directly.",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1599,
+        "latencyMs": 43432.41509999999
+      }
+    },
+    {
+      "id": "promo-03",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "Do you give a discount for first-time customers?",
+      "status": 200,
+      "draft": "I don't have any information on a first-time customer discount in our system.",
+      "violations": [
+        {
+          "name": "no_unverified_discount_claim",
+          "reason": "Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn."
+        }
+      ],
+      "finalReply": "I want to make sure I give you accurate information, and I'm not confident that answer is correct. Let me connect you with our support team, who can help directly.",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1577,
+        "latencyMs": 101295.5981
+      }
+    },
+    {
+      "id": "promo-04",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "Do you have a student discount?",
+      "status": 200,
+      "draft": "I'm sorry, I don't have any information on whether we offer a student discount.",
+      "violations": [],
+      "finalReply": "I'm sorry, I don't have any information on whether we offer a student discount.",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1567,
+        "latencyMs": 33063.6649
+      }
+    },
+    {
+      "id": "promo-05",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "Is there a bonus if I sign up for your newsletter?",
+      "status": 200,
+      "draft": "I couldn't find any information about a bonus for signing up for our newsletter. I'm sorry I can't be more helpful on that!",
+      "violations": [],
+      "finalReply": "I couldn't find any information about a bonus for signing up for our newsletter. I'm sorry I can't be more helpful on that!",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1594,
+        "latencyMs": 26528.915799999988
+      }
+    },
+    {
+      "id": "promo-06",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "I saw an ad for a summer sale. Is it still on?",
+      "status": 200,
+      "draft": "I don't have any information on a summer sale in our store policies or current promotions.",
+      "violations": [
+        {
+          "name": "no_unverified_discount_claim",
+          "reason": "Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn."
+        }
+      ],
+      "finalReply": "I want to make sure I give you accurate information, and I'm not confident that answer is correct. Let me connect you with our support team, who can help directly.",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1580,
+        "latencyMs": 26300.501499999955
+      }
+    },
+    {
+      "id": "promo-07",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "Do you do Black Friday deals?",
+      "status": 200,
+      "draft": "I don't have information on whether we offer Black Friday deals.",
+      "violations": [],
+      "finalReply": "I don't have information on whether we offer Black Friday deals.",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1567,
+        "latencyMs": 38035.22289999999
+      }
+    },
+    {
+      "id": "promo-08",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "Can I get free shipping with a coupon?",
+      "status": 200,
+      "draft": "Standard domestic shipping is a flat $4.99, or free on orders over $50. According to our shipping policy, coupons do not automatically grant free shipping unless specifically stated in the promotion's terms.",
+      "violations": [
+        {
+          "name": "no_unverified_discount_claim",
+          "reason": "Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn."
+        }
+      ],
+      "finalReply": "I want to make sure I give you accurate information, and I'm not confident that answer is correct. Let me connect you with our support team, who can help directly.",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1900,
+        "latencyMs": 42243.17439999996
+      }
+    },
+    {
+      "id": "promo-09",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "What's the cheapest way to buy the wool scarf?",
+      "status": 502,
+      "error": "Sorry, something went wrong while processing that request. Please try again."
+    },
+    {
+      "id": "promo-10",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "Will the wool scarf go on sale soon?",
+      "status": 200,
+      "draft": "I'm not sure—our knowledge base doesn't mention any upcoming sales or promotions for the wool scarf.",
+      "violations": [
+        {
+          "name": "no_unverified_discount_claim",
+          "reason": "Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn."
+        }
+      ],
+      "finalReply": "I want to make sure I give you accurate information, and I'm not confident that answer is correct. Let me connect you with our support team, who can help directly.",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1668,
+        "latencyMs": 77664.76830000005
+      }
+    },
+    {
+      "id": "promo-11",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "Do you have a loyalty or rewards programme?",
+      "status": 200,
+      "draft": "We don't currently have a loyalty or rewards programme mentioned in our store information. Let me know if you have any other questions!",
+      "violations": [],
+      "finalReply": "We don't currently have a loyalty or rewards programme mentioned in our store information. Let me know if you have any other questions!",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1582,
+        "latencyMs": 21129.80330000003
+      }
+    },
+    {
+      "id": "promo-12",
+      "set": "promotion-prompts",
+      "category": "heldout",
+      "message": "I had a code but I forgot it. Can you look it up for me?",
+      "status": 200,
+      "draft": "I'm sorry, but I don't have a way to look up your personal discount code or retrieve forgotten codes. If you have a specific code you'd like me to check for validity, just let me know what it is and I'd be happy to test it for you!",
+      "violations": [],
+      "finalReply": "I'm sorry, but I don't have a way to look up your personal discount code or retrieve forgotten codes. If you have a specific code you'd like me to check for validity, just let me know what it is and I'd be happy to test it for you!",
+      "toolsUsed": [],
+      "signals": [],
+      "containsSecret": false,
+      "usage": {
+        "calls": 1,
+        "totalTokens": 803,
+        "latencyMs": 10934.98629999999
+      }
+    }
+  ]
+}
