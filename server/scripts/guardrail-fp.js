@@ -34,6 +34,9 @@ const RECORD_DIR = path.resolve(__dirname, '../../docs/results');
 const args = process.argv.slice(2);
 const record = args.includes('--record');
 const capture = args.includes('--capture');
+// --prompts=<file>: capture only the prompts in that file ({ version, prompts: [{ id, message }] })
+// instead of the dataset plus the benign set. Used for a held-out check of a fix.
+const promptsArg = args.find((a) => a.startsWith('--prompts='));
 const analyzeArg = args.find((a) => a.startsWith('--analyze='));
 const labelsArg = args.find((a) => a.startsWith('--labels='));
 
@@ -46,6 +49,16 @@ function recordedPath(kind, model) {
 }
 
 function loadPrompts() {
+  if (promptsArg) {
+    const file = path.resolve(promptsArg.slice('--prompts='.length));
+    const extra = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    return {
+      datasetVersion: null,
+      benignVersion: null,
+      promptsFile: { name: path.basename(file), version: extra.version },
+      prompts: extra.prompts.map((p) => ({ id: p.id, set: path.basename(file, '.json'), category: 'heldout', message: p.message, priorTurns: [] })),
+    };
+  }
   const dataset = validateDataset(JSON.parse(fs.readFileSync(DATASET_PATH, 'utf-8')));
   const benign = JSON.parse(fs.readFileSync(BENIGN_PATH, 'utf-8'));
   return {
@@ -72,7 +85,7 @@ async function runCapture() {
   const secrets = [config.geminiApiKey, config.anthropicApiKey].filter(Boolean);
   const model = config.llmProvider === 'gemini' ? config.geminiModel : config.anthropicModel;
   const delay = Number(process.env.EVAL_DELAY_MS) || 8000;
-  const { prompts, datasetVersion, benignVersion } = loadPrompts();
+  const { prompts, datasetVersion, benignVersion, promptsFile } = loadPrompts();
   console.log(`Capturing ${prompts.length} prompts from ${config.llmProvider} ${model}, ${delay}ms apart.`);
 
   const out = [];
@@ -106,7 +119,7 @@ async function runCapture() {
   }
 
   const calls = out.reduce((n, e) => n + (e.usage?.calls ?? 0), 0);
-  let json = JSON.stringify({ meta: { date: new Date().toISOString(), provider: config.llmProvider, model, datasetVersion, benignPromptsVersion: benignVersion, delayMs: delay, modelCalls: calls }, aborted, prompts: out }, null, 2);
+  let json = JSON.stringify({ meta: { date: new Date().toISOString(), provider: config.llmProvider, model, datasetVersion, benignPromptsVersion: benignVersion, promptsFile: promptsFile ?? null, delayMs: delay, modelCalls: calls }, aborted, prompts: out }, null, 2);
   for (const secret of secrets) json = json.split(secret).join('[redacted]');
   if (record) {
     const file = recordedPath('guardrail-drafts', model);

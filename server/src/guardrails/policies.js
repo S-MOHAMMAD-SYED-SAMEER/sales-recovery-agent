@@ -26,12 +26,68 @@ function usedTool(toolsUsed, name) {
   return Array.isArray(toolsUsed) && toolsUsed.includes(name);
 }
 
+// ---------------------------------------------------------------------------
+// Claim versus mention.
+//
+// The first real-model run showed the two policies below firing on replies that
+// claimed nothing: a refusal that repeated the customer's own words ("I don't
+// have the ability to provide a 50% off discount code") and an offer ("I can
+// check if something is in stock"). Both contain the risky words and neither
+// asserts anything. So for those two policies a match only counts when the
+// clause it sits in is not a refusal, an offer to check, or a conditional.
+//
+// A clause is the part of the sentence around the match, cut at a comma,
+// semicolon, colon, dash, bracket, or one of and / but / however / though /
+// while / so / because / then. The cut is what keeps a refusal from excusing a
+// claim made right beside it: "I can't promise it will last, but use SAVE20 for
+// 20% off" is still blocked, because "can't" is on the other side of the "but".
+// ---------------------------------------------------------------------------
+const CLAUSE_BREAK_RE = /[,;:—–()]|\s(?:and|but|however|though|while|so|because|then)\s/gi;
+const NEGATION_BEFORE_RE =
+  /\b(?:can(?:'|’)?t|cannot|can not|don(?:'|’)?t|do not|doesn(?:'|’)?t|does not|didn(?:'|’)?t|won(?:'|’)?t|unable|not able|no|not|never|nothing|without|isn(?:'|’)?t|aren(?:'|’)?t)\b/i;
+const NEGATION_AFTER_RE =
+  /\b(?:isn(?:'|’)?t|aren(?:'|’)?t|is not|are not|not (?:something|possible|available|offered|valid)|can(?:'|’)?t|cannot|won(?:'|’)?t|unavailable)\b/i;
+const OFFER_OR_CONDITIONAL_RE =
+  /\b(?:if|whether)\b|\b(?:can|could|will|would|let me|happy to|glad to|able to|want me to|going to)\s+(?:also\s+)?(?:check|look(?:\s+up)?|see|find out|verify|validate|confirm)\b/i;
+
+function clauseAround(text, start, end) {
+  const before = text.slice(0, start);
+  const sentenceStart =
+    Math.max(before.lastIndexOf('. '), before.lastIndexOf('! '), before.lastIndexOf('? '), before.lastIndexOf('\n')) + 1;
+  let prefix = before.slice(sentenceStart);
+  let lastBreakEnd = 0;
+  for (const m of prefix.matchAll(CLAUSE_BREAK_RE)) lastBreakEnd = m.index + m[0].length;
+  prefix = prefix.slice(lastBreakEnd);
+
+  const after = text.slice(end);
+  const sentenceEnds = ['. ', '! ', '? ', '\n'].map((t) => after.indexOf(t)).filter((i) => i >= 0);
+  let suffix = sentenceEnds.length ? after.slice(0, Math.min(...sentenceEnds)) : after;
+  const firstBreak = suffix.search(new RegExp(CLAUSE_BREAK_RE.source, 'i'));
+  if (firstBreak >= 0) suffix = suffix.slice(0, firstBreak);
+  return { prefix, suffix };
+}
+
+// True if the text has at least one match of `re` that is a claim, i.e. one that
+// `isMention(prefix, suffix)` does not excuse.
+function hasClaim(text, re, isMention) {
+  const global = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+  for (const match of text.matchAll(global)) {
+    const { prefix, suffix } = clauseAround(text, match.index, match.index + match[0].length);
+    if (!isMention(prefix, suffix)) return true;
+  }
+  return false;
+}
+
+const isDiscountMention = (prefix, suffix) =>
+  NEGATION_BEFORE_RE.test(prefix) || NEGATION_AFTER_RE.test(suffix) || OFFER_OR_CONDITIONAL_RE.test(prefix);
+const isStockMention = (prefix) => OFFER_OR_CONDITIONAL_RE.test(prefix);
+
 export const POLICIES = [
   {
     name: 'no_unverified_discount_claim',
     description: 'Do not state or imply a discount/code/percent-off unless checkDiscount ran this turn.',
     check({ reply, toolsUsed }) {
-      if (DISCOUNT_CLAIM_RE.test(reply) && !usedTool(toolsUsed, 'checkDiscount')) {
+      if (!usedTool(toolsUsed, 'checkDiscount') && hasClaim(reply, DISCOUNT_CLAIM_RE, isDiscountMention)) {
         return 'Reply mentions a discount/code/percent-off without checkDiscount having run this turn.';
       }
       return null;
@@ -41,7 +97,7 @@ export const POLICIES = [
     name: 'no_unverified_stock_claim',
     description: 'Do not state stock/availability unless checkStock ran this turn.',
     check({ reply, toolsUsed }) {
-      if (STOCK_CLAIM_RE.test(reply) && !usedTool(toolsUsed, 'checkStock')) {
+      if (!usedTool(toolsUsed, 'checkStock') && hasClaim(reply, STOCK_CLAIM_RE, isStockMention)) {
         return 'Reply makes a stock/availability claim without checkStock having run this turn.';
       }
       return null;
