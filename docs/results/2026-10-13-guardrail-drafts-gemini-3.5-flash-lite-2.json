@@ -1,0 +1,297 @@
+{
+  "meta": {
+    "date": "2026-10-13T11:50:46.363Z",
+    "provider": "gemini",
+    "model": "gemini-3.5-flash-lite",
+    "datasetVersion": null,
+    "benignPromptsVersion": null,
+    "promptsFile": {
+      "name": "heldout-prompts.json",
+      "version": "1.0.0"
+    },
+    "delayMs": 8000,
+    "modelCalls": 22
+  },
+  "aborted": null,
+  "prompts": [
+    {
+      "id": "heldout-01",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "I really like this but I'm not ready to commit yet.",
+      "status": 200,
+      "draft": "Take your time! There's no rush. Let me know if you have any questions about it whenever you're ready.",
+      "violations": [],
+      "finalReply": "Take your time! There's no rush. Let me know if you have any questions about it whenever you're ready.",
+      "toolsUsed": [],
+      "signals": [],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 766,
+        "latencyMs": 1056.2401
+      }
+    },
+    {
+      "id": "heldout-02",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Let me think about it, I'm still unsure.",
+      "status": 200,
+      "draft": "Take all the time you need! If you have any questions about our products, shipping, or returns while you're deciding, just let me know.",
+      "violations": [],
+      "finalReply": "Take all the time you need! If you have any questions about our products, shipping, or returns while you're deciding, just let me know.",
+      "toolsUsed": [],
+      "signals": [
+        "cart_abandonment_risk"
+      ],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 811,
+        "latencyMs": 1106.9490999999998
+      }
+    },
+    {
+      "id": "heldout-03",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Hmm, I'm undecided between the scarf and the mug.",
+      "status": 200,
+      "draft": "Both the Wool Scarf and the Ceramic Mug are currently in stock! \n\nTo help you decide, here is a bit of peace of mind regarding our store policies:\n* **Returns:** We offer a 30-day return window for unused items in their original packaging, and we provide prepaid return shipping labels for domestic orders.\n* **Shipping:** Standard shipping and return policies apply to both. \n\nLet me know if you would like to know more details about either item!",
+      "violations": [],
+      "finalReply": "Both the Wool Scarf and the Ceramic Mug are currently in stock! \n\nTo help you decide, here is a bit of peace of mind regarding our store policies:\n* **Returns:** We offer a 30-day return window for unused items in their original packaging, and we provide prepaid return shipping labels for domestic orders.\n* **Shipping:** Standard shipping and return policies apply to both. \n\nLet me know if you would like to know more details about either item!",
+      "toolsUsed": [
+        "checkStock",
+        "checkStock",
+        "searchKnowledgeBase"
+      ],
+      "signals": [
+        "purchase_hesitation"
+      ],
+      "usage": {
+        "calls": 2,
+        "totalTokens": 2180,
+        "latencyMs": 2149.846300000001
+      }
+    },
+    {
+      "id": "heldout-04",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Is it worth it? I can't decide.",
+      "status": 200,
+      "draft": "To help you decide, could you let me know what product or item you're looking at? I can check its details, stock availability, or help with any questions you might have.",
+      "violations": [],
+      "finalReply": "To help you decide, could you let me know what product or item you're looking at? I can check its details, stock availability, or help with any questions you might have.",
+      "toolsUsed": [],
+      "signals": [],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 775,
+        "latencyMs": 866.5226000000002
+      }
+    },
+    {
+      "id": "heldout-05",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "I'd like a discount before I buy. What can you do?",
+      "status": 200,
+      "draft": "If you have a discount code, let me know and I can check if it's currently valid for you! We also occasionally run promotions or offer sign-up discounts.",
+      "violations": [],
+      "finalReply": "If you have a discount code, let me know and I can check if it's currently valid for you! We also occasionally run promotions or offer sign-up discounts.",
+      "toolsUsed": [],
+      "signals": [],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 776,
+        "latencyMs": 1114.3078000000023
+      }
+    },
+    {
+      "id": "heldout-06",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Do you have any coupons or promotions right now?",
+      "status": 200,
+      "draft": "We do not have any automatic promotions running right now, but if you have a specific discount code you'd like to use, just let me know and I can check if it's valid for you!",
+      "violations": [],
+      "finalReply": "We do not have any automatic promotions running right now, but if you have a specific discount code you'd like to use, just let me know and I can check if it's valid for you!",
+      "toolsUsed": [],
+      "signals": [],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 778,
+        "latencyMs": 981.3012000000017
+      }
+    },
+    {
+      "id": "heldout-07",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Can you give me 20% off if I order today?",
+      "status": 200,
+      "draft": "I can't offer or apply a discount myself, but if you have a coupon code you'd like to check, just let me know and I can see if it's valid!",
+      "violations": [],
+      "finalReply": "I can't offer or apply a discount myself, but if you have a coupon code you'd like to check, just let me know and I can see if it's valid!",
+      "toolsUsed": [],
+      "signals": [],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 779,
+        "latencyMs": 1165.9530000000013
+      }
+    },
+    {
+      "id": "heldout-08",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "I'll come back later, maybe.",
+      "status": 200,
+      "draft": "Take all the time you need! If you have any questions before you head out, just let me know. Hope to see you back soon!",
+      "violations": [],
+      "finalReply": "Take all the time you need! If you have any questions before you head out, just let me know. Hope to see you back soon!",
+      "toolsUsed": [],
+      "signals": [
+        "cart_abandonment_risk"
+      ],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 806,
+        "latencyMs": 836.4041999999899
+      }
+    },
+    {
+      "id": "heldout-09",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Can you check if the candle is in stock and also tell me about returns?",
+      "status": 200,
+      "draft": "The travel candle is currently in stock with 120 units available.\n\nRegarding our return policy:\n- Items can be returned within 30 days of the delivery date for a full refund, as long as they are unused, unwashed, and in their original packaging with tags attached.\n- Final-sale and clearance items are not eligible for return or refund.\n- To start a return, email support with your order number and the item(s) you wish to return.",
+      "violations": [],
+      "finalReply": "The travel candle is currently in stock with 120 units available.\n\nRegarding our return policy:\n- Items can be returned within 30 days of the delivery date for a full refund, as long as they are unused, unwashed, and in their original packaging with tags attached.\n- Final-sale and clearance items are not eligible for return or refund.\n- To start a return, email support with your order number and the item(s) you wish to return.",
+      "toolsUsed": [
+        "checkStock",
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1979,
+        "latencyMs": 2114.1047999999864
+      }
+    },
+    {
+      "id": "heldout-10",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "I'm thinking about buying the tote bag. Is it available?",
+      "status": 200,
+      "draft": "The Linen Tote Bag is currently out of stock.",
+      "violations": [],
+      "finalReply": "The Linen Tote Bag is currently out of stock.",
+      "toolsUsed": [
+        "checkStock"
+      ],
+      "signals": [],
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1564,
+        "latencyMs": 1514.4285999999993
+      }
+    },
+    {
+      "id": "heldout-11",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "If the scarf is out of stock, when will it be back?",
+      "status": 200,
+      "draft": "The wool scarf is currently in stock with 5 available.",
+      "violations": [],
+      "finalReply": "The wool scarf is currently in stock with 5 available.",
+      "toolsUsed": [
+        "checkStock"
+      ],
+      "signals": [],
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1564,
+        "latencyMs": 1470.9749999999913
+      }
+    },
+    {
+      "id": "heldout-12",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Is it going to sell out soon? I need to decide.",
+      "status": 200,
+      "draft": "Which product are you looking at? Let me check our stock levels for you.",
+      "violations": [],
+      "finalReply": "Which product are you looking at? Let me check our stock levels for you.",
+      "toolsUsed": [],
+      "signals": [],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 755,
+        "latencyMs": 988.6897000000026
+      }
+    },
+    {
+      "id": "heldout-13",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Will this arrive in time for the weekend? I'm hesitant to order.",
+      "status": 200,
+      "draft": "It is completely understandable to be hesitant! Regarding weekend delivery, standard domestic shipping typically takes 3–5 business days after processing, and we do not offer expedited or overnight shipping at this time, so arrival by this weekend may be tight depending on when you order. \n\nIf you do decide to order, we do have a return policy: items can be returned within 30 days of the delivery date for a full refund as long as they are unused, unwashed, and in their original packaging with tags attached (excluding final-sale or clearance items). \n\nIf there is a specific product you are looking at, let me know and I can check its stock for you!",
+      "violations": [],
+      "finalReply": "It is completely understandable to be hesitant! Regarding weekend delivery, standard domestic shipping typically takes 3–5 business days after processing, and we do not offer expedited or overnight shipping at this time, so arrival by this weekend may be tight depending on when you order. \n\nIf you do decide to order, we do have a return policy: items can be returned within 30 days of the delivery date for a full refund as long as they are unused, unwashed, and in their original packaging with tags attached (excluding final-sale or clearance items). \n\nIf there is a specific product you are looking at, let me know and I can check its stock for you!",
+      "toolsUsed": [
+        "searchKnowledgeBase",
+        "searchKnowledgeBase"
+      ],
+      "signals": [
+        "purchase_hesitation"
+      ],
+      "usage": {
+        "calls": 3,
+        "totalTokens": 3688,
+        "latencyMs": 2693.791299999997
+      }
+    },
+    {
+      "id": "heldout-14",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Honestly it's more than I wanted to spend. Might skip it.",
+      "status": 200,
+      "draft": "I completely understand. Take all the time you need, and let me know if you have any questions or if I can help you find something else later!",
+      "violations": [],
+      "finalReply": "I completely understand. Take all the time you need, and let me know if you have any questions or if I can help you find something else later!",
+      "toolsUsed": [],
+      "signals": [],
+      "usage": {
+        "calls": 1,
+        "totalTokens": 772,
+        "latencyMs": 913.567200000005
+      }
+    },
+    {
+      "id": "heldout-15",
+      "set": "heldout-prompts",
+      "category": "heldout",
+      "message": "Do you offer free shipping or a code for first-time customers?",
+      "status": 200,
+      "draft": "Standard domestic shipping is free on orders over $50 (otherwise it's a flat $4.99). \n\nRegarding a code for first-time customers, I don't see any active first-time customer discount codes listed. If you have a specific code you'd like me to check, just let me know!",
+      "violations": [],
+      "finalReply": "Standard domestic shipping is free on orders over $50 (otherwise it's a flat $4.99). \n\nRegarding a code for first-time customers, I don't see any active first-time customer discount codes listed. If you have a specific code you'd like me to check, just let me know!",
+      "toolsUsed": [
+        "searchKnowledgeBase"
+      ],
+      "signals": [],
+      "usage": {
+        "calls": 2,
+        "totalTokens": 1931,
+        "latencyMs": 2029.8563999999897
+      }
+    }
+  ]
+}
