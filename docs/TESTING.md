@@ -148,6 +148,12 @@ as good as the drafts it has been tried on, and every round of new real drafts f
   was redacted. Not covered: injection through the knowledge-base documents (committed and trusted),
   multi-turn escalation, and other languages.
 
+## What the guardrails do and do not cover
+
+Guardrails enforce discount, stock, order-status and promotion claims in code. Other product-fact claims (how items are sold, materials, dimensions and so on) rely on retrieval grounding, not on a code check. Planned for v1.1: claim verification against the knowledge base. That is the scope behind the "1 of 5 violations of any kind missed" in the table above: the
+missed draft stated a product fact ("We currently sell all our items individually") that no tool or document
+supports, which is a claim category the code does not check.
+
 ## What is not tested
 
 No browser test of the demo page (it is checked by eye and by screenshots); no load test; no retrieval-quality

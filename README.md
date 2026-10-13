@@ -189,9 +189,12 @@ PROJECT-1.md             the case-study write-up
   integration, no authentication (anyone can look up any order number), no payment handling, and no
   way to actually issue a refund or hand over to a person: the fallback reply only *says* support
   can help.
+- **What the guardrails cover.** They enforce discount, stock, order-status and promotion claims in code. Other
+  product-fact claims (how items are sold, materials, dimensions and so on) rely on retrieval grounding, not on a
+  code check: in the recorded data one such claim ("we currently sell all our items individually") got through.
+  Planned for v1.1: claim verification against the knowledge base.
 - Signal detection and guardrails are regex patterns over English text. They catch the shapes they were built
-  for; every round of fresh real drafts found another, and the final measurement still missed one unrelated
-  unsupported claim (a statement about how items are sold).
+  for; every round of fresh real drafts found another.
 - The `demo` provider is not a model. It understands a fixed set of questions and answers anything
   else with a fixed "choose one of the examples" reply.
 - The rate limiter is per IP; behind a reverse proxy every visitor shares one bucket.
