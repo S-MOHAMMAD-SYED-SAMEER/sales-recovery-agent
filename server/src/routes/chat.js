@@ -154,7 +154,16 @@ export async function handleChat({ sessionId, message }, deps = {}) {
   // body, not in it: the API response the page reads is unchanged.
   if (usage) console.log(`[chat] model usage: ${formatUsage(usage)}`);
 
-  return { status: 200, body: { reply: finalReply, toolsUsed, signals }, usage };
+  // The guardrails' verdict and the model's own draft, beside the body (the API
+  // response is unchanged). The draft is what scripts/guardrail-fp.js needs to tell
+  // a block that was right from one that was not; it is never sent to the client.
+  const guardrail = {
+    safe: guardrailResult.safe,
+    violations: guardrailResult.violations.map((v) => ({ name: v.name, reason: v.reason })),
+    draft: text,
+  };
+
+  return { status: 200, body: { reply: finalReply, toolsUsed, signals }, usage, guardrail };
 }
 
 router.post('/chat', async (req, res) => {
