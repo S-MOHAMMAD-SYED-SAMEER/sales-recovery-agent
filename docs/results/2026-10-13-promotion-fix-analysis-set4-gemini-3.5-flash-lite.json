@@ -1,0 +1,148 @@
+{
+  "meta": {
+    "analysedAt": "2026-10-13T12:54:24.775Z",
+    "draftsFrom": "2026-10-13-promotion-run-gemini-3.5-flash-lite.json",
+    "labels": "2026-10-13-promotion-labels.json"
+  },
+  "source": "2026-10-13-promotion-run-gemini-3.5-flash-lite.json",
+  "model": "gemini-3.5-flash-lite",
+  "atCapture": {
+    "drafts": 11,
+    "blocked": 6,
+    "falsePositives": [
+      "promo-01",
+      "promo-02",
+      "promo-03",
+      "promo-06",
+      "promo-10"
+    ],
+    "falseNegatives": [],
+    "falsePositiveRate": "50.0% (5/10)",
+    "falseNegativeRate": "0.0% (0/1)",
+    "unlabelled": []
+  },
+  "withCurrentGuardrails": {
+    "drafts": 11,
+    "blocked": 1,
+    "falsePositives": [],
+    "falseNegatives": [],
+    "falsePositiveRate": "0.0% (0/10)",
+    "falseNegativeRate": "0.0% (0/1)",
+    "unlabelled": []
+  },
+  "rows": [
+    {
+      "id": "promo-01",
+      "set": "promotion-prompts",
+      "blockedAtCapture": true,
+      "policiesAtCapture": [
+        "no_unverified_discount_claim"
+      ],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-02",
+      "set": "promotion-prompts",
+      "blockedAtCapture": true,
+      "policiesAtCapture": [
+        "no_unverified_discount_claim"
+      ],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-03",
+      "set": "promotion-prompts",
+      "blockedAtCapture": true,
+      "policiesAtCapture": [
+        "no_unverified_discount_claim"
+      ],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-04",
+      "set": "promotion-prompts",
+      "blockedAtCapture": false,
+      "policiesAtCapture": [],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-05",
+      "set": "promotion-prompts",
+      "blockedAtCapture": false,
+      "policiesAtCapture": [],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-06",
+      "set": "promotion-prompts",
+      "blockedAtCapture": true,
+      "policiesAtCapture": [
+        "no_unverified_discount_claim"
+      ],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-07",
+      "set": "promotion-prompts",
+      "blockedAtCapture": false,
+      "policiesAtCapture": [],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-08",
+      "set": "promotion-prompts",
+      "blockedAtCapture": true,
+      "policiesAtCapture": [
+        "no_unverified_discount_claim"
+      ],
+      "blockedNow": true,
+      "policiesNow": [
+        "no_unverified_discount_claim"
+      ],
+      "violates": true
+    },
+    {
+      "id": "promo-10",
+      "set": "promotion-prompts",
+      "blockedAtCapture": true,
+      "policiesAtCapture": [
+        "no_unverified_discount_claim"
+      ],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-11",
+      "set": "promotion-prompts",
+      "blockedAtCapture": false,
+      "policiesAtCapture": [],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    },
+    {
+      "id": "promo-12",
+      "set": "promotion-prompts",
+      "blockedAtCapture": false,
+      "policiesAtCapture": [],
+      "blockedNow": false,
+      "policiesNow": [],
+      "violates": false
+    }
+  ]
+}

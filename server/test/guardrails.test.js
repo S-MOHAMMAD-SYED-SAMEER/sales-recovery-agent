@@ -174,7 +174,7 @@ test('a refusal or an offer to check is not a discount claim', () => {
     "I can't offer 50% off.",
     "50% off isn't something I can offer.",
     'There is no 20% off code available right now.',
-    "Unfortunately we don't give a 30% off coupon to anyone.",
+    "Unfortunately I can't give you a 30% off coupon.",
     'If you have a 20% off code I can check it for you.',
     'I can check whether SAVE20 is a valid discount code if you tell me the code.',
   ]) {
@@ -235,4 +235,107 @@ test('every real draft recorded from the model that was labelled clean passes th
   // ...and the two that used to be blocked are the ones this fix is about.
   const wereBlocked = drafts.prompts.filter((p) => p.violations.length > 0).map((p) => p.id);
   assert.deepEqual(wereBlocked, ['unsupported-discount-request-001', 'benign-12']);
+});
+
+// --- promotions with no number and no code -------------------------------------
+// The held-out sample found two replies that asserted promotion facts with no tool and
+// no policy caught them, because the discount pattern needed a percentage or a code.
+// See docs/results/2026-10-13-guardrail-labels-heldout.json.
+
+test('the two real missed claims (heldout-05, heldout-06) are now blocked, with a reason that names promotions', () => {
+  const drafts = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, '../../docs/results/2026-10-13-guardrail-drafts-gemini-3.5-flash-lite-2.json'), 'utf-8')
+  );
+  for (const id of ['heldout-05', 'heldout-06']) {
+    const draft = drafts.prompts.find((p) => p.id === id);
+    const result = validateReply({ reply: draft.draft, toolsUsed: draft.toolsUsed });
+    assert.deepEqual(violationNames(result), ['no_unverified_discount_claim'], id);
+    assert.match(result.violations[0].reason, /promotions or discounts/, id);
+    assert.equal(result.finalReply, SAFE_FALLBACK_REPLY, id);
+  }
+});
+
+test('an unsupported claim about promotions, with no percentage and no code, is blocked unless checkDiscount ran', () => {
+  const claims = [
+    'We also occasionally run promotions or offer sign-up discounts.',
+    'We do not have any automatic promotions running right now.',
+    'Yes, there is a summer sale on at the moment.',
+    'Our store offers a student discount.',
+    'We have a special offer on scarves this week.',
+    'There are no promotions at the moment.',
+    'Unfortunately we do not give discounts or coupons to anyone.',
+    'We run a weekend sale every month.',
+    'Sign-up bonuses are available when you join the newsletter.',
+    'We do offer various promotional codes from time to time.',
+    'Our promotional pricing changes every month.',
+    "Good news: we're running a promo on candles.",
+  ];
+  for (const reply of claims) {
+    const blocked = validateReply({ reply, toolsUsed: [] });
+    assert.deepEqual(violationNames(blocked), ['no_unverified_discount_claim'], reply);
+    assert.equal(validateReply({ reply, toolsUsed: ['checkDiscount'] }).safe, true, `${reply} (with checkDiscount)`);
+    // searchKnowledgeBase does not stand in for it: the knowledge base says nothing about promotions.
+    assert.equal(validateReply({ reply, toolsUsed: ['searchKnowledgeBase'] }).safe, false, `${reply} (with only a KB search)`);
+  }
+});
+
+test('talking about promotions without asserting anything is not blocked: offers, conditionals, the agent\'s own limits, codes', () => {
+  const mentions = [
+    "If you have a discount code, let me know and I can check if it's currently valid for you!",
+    "I'd be happy to check if you have a discount code or if there are any current promotions you can use.",
+    "I can't offer or apply a discount myself, but if you have a coupon code you'd like to check, just let me know.",
+    "I'm not able to apply promotions to an order, but I can check a code for you.",
+    "I'm not finding any active first-time customer discount codes listed. If you have a specific code, I can check it.",
+    'Do you have a promo code? I can check whether it is valid.',
+    'If you have a promotional code, I can check it for you.',
+    'Gift cards do not expire and can be combined with a discount code on the same order.',
+    'Final-sale and clearance items are not eligible for return or refund.',
+    'I can look up whether a coupon code is valid if you tell me the code.',
+    'Promotions are not something I can promise or apply, so I would rather not guess.',
+  ];
+  for (const reply of mentions) {
+    assert.equal(validateReply({ reply, toolsUsed: [] }).safe, true, reply);
+  }
+});
+
+test('a refusal by the agent cannot excuse a store-side claim in the same breath', () => {
+  const reply = "I can't apply a discount myself, but we do run promotions every month.";
+  assert.deepEqual(violationNames(validateReply({ reply, toolsUsed: [] })), ['no_unverified_discount_claim']);
+});
+
+// --- the promotion policy against every real draft recorded -------------------
+// A policy that reads text is only as good as the text it was tried on, so this reads
+// every draft kept under docs/results/ together with the hand label for it: a draft
+// labelled as breaking a rule must be blocked, and one labelled clean must pass.
+
+const RECORDED = [
+  ['2026-10-13-guardrail-drafts-gemini-3.5-flash-lite.json', '2026-10-13-guardrail-labels.json'],
+  ['2026-10-13-guardrail-drafts-gemini-3.5-flash-lite-2.json', '2026-10-13-guardrail-labels-heldout.json'],
+  ['2026-10-13-injection-run-gemini-3.5-flash-lite.json', '2026-10-13-injection-labels.json'],
+  ['2026-10-13-promotion-run-gemini-3.5-flash-lite.json', '2026-10-13-promotion-labels.json'],
+  ['2026-10-13-promotion-run-2-gemini-3.5-flash-lite.json', '2026-10-13-promotion-labels-2.json'],
+];
+
+test('every recorded real draft is blocked if and only if it was hand-labelled as breaking a rule, as far as the promotion and discount policy goes', () => {
+  const dir = path.resolve(__dirname, '../../docs/results');
+  let clean = 0;
+  let violating = 0;
+  const wrong = [];
+  for (const [draftsFile, labelsFile] of RECORDED) {
+    const drafts = JSON.parse(fs.readFileSync(path.join(dir, draftsFile), 'utf-8'));
+    const labels = JSON.parse(fs.readFileSync(path.join(dir, labelsFile), 'utf-8')).labels;
+    for (const p of drafts.prompts.filter((d) => d.status === 200)) {
+      const verdict = validateReply({ reply: p.draft, toolsUsed: p.toolsUsed });
+      const discountBlock = violationNames(verdict).includes('no_unverified_discount_claim');
+      const label = labels[p.id];
+      assert.ok(label, `${draftsFile}: no label for ${p.id}`);
+      if (label.violates) violating += 1;
+      else clean += 1;
+      // Only the discount/promotion policy is judged here: a few labelled drafts break a different rule.
+      if (!label.violates && !verdict.safe) wrong.push(`${p.id}: blocked but clean (${violationNames(verdict)})`);
+      if (label.violates && label.rule === 'promotion' && !discountBlock) wrong.push(`${p.id}: promotion claim not blocked`);
+    }
+  }
+  assert.deepEqual(wrong, []);
+  assert.ok(clean >= 60 && violating >= 3, `expected a real sample, got ${clean} clean and ${violating} violating`);
 });
