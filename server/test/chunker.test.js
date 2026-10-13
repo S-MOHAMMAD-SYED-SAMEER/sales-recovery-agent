@@ -59,3 +59,15 @@ test('splits a long section into multiple overlapping chunks that all keep the s
     assert.equal(chunk.heading, 'Long Doc > Big Section');
   }
 });
+
+test('CRLF documents chunk exactly like LF documents, with no stray carriage returns', () => {
+  const lf = '# Policy\n\nIntro line.\n\n## First\n\nOne sentence here.\nSecond line of the same paragraph.\n\n## Second\n\n- an item\n- another item\n';
+  const crlf = lf.replace(/\n/g, '\r\n');
+
+  const fromLf = chunkMarkdown(lf);
+  const fromCrlf = chunkMarkdown(crlf);
+
+  assert.deepEqual(fromCrlf, fromLf);
+  assert.ok(fromCrlf.length >= 3);
+  assert.ok(fromCrlf.every((chunk) => !chunk.text.includes('\r') && !chunk.heading.includes('\r')));
+});

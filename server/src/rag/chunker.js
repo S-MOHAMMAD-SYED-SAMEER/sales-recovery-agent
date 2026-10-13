@@ -7,7 +7,9 @@ const DEFAULT_OVERLAP_CHARS = 100;
 // e.g. "Shipping Policy > International Shipping" rather than a bare
 // paragraph with no context.
 function splitIntoSections(markdown) {
-  const lines = markdown.split('\n');
+  // CRLF files (a Windows checkout without .gitattributes) would otherwise leave
+  // a stray \r on every line, and it would end up in the chunks shown to the model.
+  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
   let title = '';
   const sections = [];
   let current = null;
