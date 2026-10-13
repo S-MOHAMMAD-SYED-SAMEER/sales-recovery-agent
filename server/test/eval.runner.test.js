@@ -243,9 +243,9 @@ const INJECTION_AND_REFUSAL_IDS = [
   'injection-urgency-001',
 ];
 
-test('the shipped dataset is v1.1.0 with the five injection and refusal cases, and passes in mock mode', async () => {
+test('the shipped dataset is v1.2.0 with the five injection and refusal cases, and passes in mock mode', async () => {
   const dataset = shippedDataset();
-  assert.equal(dataset.version, '1.1.0');
+  assert.equal(dataset.version, '1.2.0');
   assert.equal(dataset.cases.length, 21);
   for (const id of INJECTION_AND_REFUSAL_IDS) {
     const found = dataset.cases.find((c) => c.id === id);

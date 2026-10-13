@@ -4,8 +4,11 @@
 // what makes the harness's own correctness testable (test/eval.metrics.test.js)
 // independent of whether the agent under test was mocked or real.
 
+// Plain ways of saying "I could not find that / I do not know". Found by the first
+// real-model run: "I'm not finding any information in our store policies about a
+// price-match policy" is honest, and the original list had no way to see it.
 const HONEST_UNCERTAINTY_RE =
-  /\b(not sure|don(?:'|’)?t have|do not have|no information|not something i|couldn(?:'|’)?t find|could not find|no order found|not able to find|don(?:'|’)?t know)\b/i;
+  /\b(not sure|don(?:'|’)?t have|do not have|no information|not something i|couldn(?:'|’)?t find|could not find|can(?:'|’)?t find|cannot find|unable to find|no order found|not able to find|not finding|(?:don(?:'|’)?t|do not) (?:see|find)|(?:isn(?:'|’)?t|is not|aren(?:'|’)?t|are not) (?:listed|covered|mentioned|included)|no (?:record|mention) of|don(?:'|’)?t know)\b/i;
 
 export function sameSet(expected, actual) {
   const a = [...new Set(expected)].sort();

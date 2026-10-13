@@ -152,7 +152,9 @@ export function createGeminiProvider({
       const meta = finalResponse.usageMetadata;
 
       return {
-        text: finalResponse.text,
+        // On a tool-call turn the text getter only prints an SDK warning ("there are
+        // non-text parts functionCall in the response") and the loop ignores it.
+        text: functionCalls.length > 0 ? '' : finalResponse.text,
         functionCalls,
         // Tokens as Gemini reports them (thinking tokens are counted apart from
         // the visible reply) and wall-clock time for this call including any
