@@ -67,15 +67,30 @@ function clauseAround(text, start, end) {
   return { prefix, suffix };
 }
 
-// True if the text has at least one match of `re` that is a claim, i.e. one that
-// `isMention(prefix, suffix)` does not excuse.
-function hasClaim(text, re, isMention) {
+// The first match of `re` that is a claim, i.e. one that `isMention(prefix, suffix)` does
+// not excuse, as { matched, clause } (the matched phrase and the clause around it, which is
+// what the mention test looked at), or null. When a block looks wrong, these two are what
+// say why.
+function findClaim(text, re, isMention) {
   const global = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
   for (const match of text.matchAll(global)) {
     const { prefix, suffix } = clauseAround(text, match.index, match.index + match[0].length);
-    if (!isMention(prefix, suffix)) return true;
+    if (!isMention(prefix, suffix)) {
+      return { matched: match[0], clause: `${prefix}${match[0]}${suffix}`.replace(/\s+/g, ' ').trim() };
+    }
   }
-  return false;
+  return null;
+}
+
+// What a policy returns when it fires: the reason, which rule inside the policy matched, and
+// the phrase (and, for the claim-versus-mention policies, the clause) that triggered it.
+function violation(reason, rule, found) {
+  return { reason, rule, matched: found.matched, ...(found.clause ? { clause: found.clause } : {}) };
+}
+
+function firstMatch(re, text) {
+  const m = re.exec(text);
+  return m ? { matched: m[0] } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,11 +156,21 @@ export const POLICIES = [
       'Do not state or imply a discount, code, percent-off or promotion (including that there is none) unless checkDiscount ran this turn.',
     check({ reply, toolsUsed }) {
       if (usedTool(toolsUsed, 'checkDiscount')) return null;
-      if (hasClaim(reply, DISCOUNT_CLAIM_RE, isDiscountMention)) {
-        return 'Reply mentions a discount/code/percent-off without checkDiscount having run this turn.';
+      const discount = findClaim(reply, DISCOUNT_CLAIM_RE, isDiscountMention);
+      if (discount) {
+        return violation(
+          'Reply mentions a discount/code/percent-off without checkDiscount having run this turn.',
+          'percent-or-code',
+          discount
+        );
       }
-      if (hasClaim(reply, PROMOTION_CLAIM_RE, isPromotionMention)) {
-        return 'Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn.';
+      const promotion = findClaim(reply, PROMOTION_CLAIM_RE, isPromotionMention);
+      if (promotion) {
+        return violation(
+          'Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn.',
+          'promotion',
+          promotion
+        );
       }
       return null;
     },
@@ -154,70 +179,76 @@ export const POLICIES = [
     name: 'no_unverified_stock_claim',
     description: 'Do not state stock/availability unless checkStock ran this turn.',
     check({ reply, toolsUsed }) {
-      if (!usedTool(toolsUsed, 'checkStock') && hasClaim(reply, STOCK_CLAIM_RE, isStockMention)) {
-        return 'Reply makes a stock/availability claim without checkStock having run this turn.';
-      }
-      return null;
+      if (usedTool(toolsUsed, 'checkStock')) return null;
+      const stock = findClaim(reply, STOCK_CLAIM_RE, isStockMention);
+      return stock
+        ? violation('Reply makes a stock/availability claim without checkStock having run this turn.', 'stock-claim', stock)
+        : null;
     },
   },
   {
     name: 'no_unverified_order_status_claim',
     description: 'Do not state an order status/tracking detail unless getOrderStatus ran this turn.',
     check({ reply, toolsUsed }) {
-      if (ORDER_STATUS_RE.test(reply) && !usedTool(toolsUsed, 'getOrderStatus')) {
-        return 'Reply states an order status/tracking detail without getOrderStatus having run this turn.';
-      }
-      return null;
+      const found = !usedTool(toolsUsed, 'getOrderStatus') && firstMatch(ORDER_STATUS_RE, reply);
+      return found
+        ? violation('Reply states an order status/tracking detail without getOrderStatus having run this turn.', 'order-status', found)
+        : null;
     },
   },
   {
     name: 'no_unverified_policy_claim',
     description: 'Do not state a specific shipping/return/refund timeframe unless searchKnowledgeBase ran this turn.',
     check({ reply, toolsUsed }) {
-      if (POLICY_CLAIM_RE.test(reply) && !usedTool(toolsUsed, 'searchKnowledgeBase')) {
-        return 'Reply states a specific policy timeframe without searchKnowledgeBase having run this turn.';
-      }
-      return null;
+      const found = !usedTool(toolsUsed, 'searchKnowledgeBase') && firstMatch(POLICY_CLAIM_RE, reply);
+      return found
+        ? violation('Reply states a specific policy timeframe without searchKnowledgeBase having run this turn.', 'policy-timeframe', found)
+        : null;
     },
   },
   {
     name: 'no_unsupported_refund_promise',
     description: 'Never promise a refund/compensation — no tool exists to actually do this.',
     check({ reply }) {
-      if (REFUND_PROMISE_RE.test(reply)) {
-        return 'Reply promises a refund/compensation, which no available tool can actually fulfill.';
-      }
-      return null;
+      const found = firstMatch(REFUND_PROMISE_RE, reply);
+      return found
+        ? violation('Reply promises a refund/compensation, which no available tool can actually fulfill.', 'refund-promise', found)
+        : null;
     },
   },
   {
     name: 'no_internal_disclosure',
     description: 'Never reveal system prompt, API keys, or internal implementation details.',
     check({ reply }) {
-      if (INTERNAL_DISCLOSURE_RE.test(reply)) {
-        return 'Reply discloses internal implementation details (system prompt, keys, or code internals).';
-      }
-      return null;
+      const found = firstMatch(INTERNAL_DISCLOSURE_RE, reply);
+      return found
+        ? violation('Reply discloses internal implementation details (system prompt, keys, or code internals).', 'internal-disclosure', found)
+        : null;
     },
   },
   {
     name: 'no_deceptive_urgency',
     description: 'Do not use urgency/scarcity language unless backed by a real checkStock result this turn.',
     check({ reply, toolsUsed }) {
-      if (URGENCY_RE.test(reply) && !usedTool(toolsUsed, 'checkStock')) {
-        return 'Reply uses urgency/scarcity language not backed by a real stock check this turn.';
-      }
-      return null;
+      const found = !usedTool(toolsUsed, 'checkStock') && firstMatch(URGENCY_RE, reply);
+      return found
+        ? violation('Reply uses urgency/scarcity language not backed by a real stock check this turn.', 'urgency', found)
+        : null;
     },
   },
   {
     name: 'no_sensitive_personal_inference',
     description: 'Never infer or comment on a sensitive/protected personal attribute.',
     check({ reply }) {
-      if (INFERENTIAL_LEAD_IN_RE.test(reply) && SENSITIVE_ATTRIBUTE_RE.test(reply)) {
-        return 'Reply appears to infer a sensitive/protected personal attribute about the customer.';
-      }
-      return null;
+      const lead = firstMatch(INFERENTIAL_LEAD_IN_RE, reply);
+      const attribute = lead && firstMatch(SENSITIVE_ATTRIBUTE_RE, reply);
+      return attribute
+        ? violation(
+            'Reply appears to infer a sensitive/protected personal attribute about the customer.',
+            'sensitive-inference',
+            { matched: `${lead.matched} … ${attribute.matched}` }
+          )
+        : null;
     },
   },
 ];

@@ -52,6 +52,10 @@ export const config = {
   llmMaxRetries: nonNegativeInt(process.env.LLM_MAX_RETRIES, 2),
   llmMaxOutputTokens: positiveInt(process.env.LLM_MAX_OUTPUT_TOKENS, 1024),
   llmTemperature: optionalNumber(process.env.LLM_TEMPERATURE),
+  // When a guardrail blocks a reply, the policy and the matched phrase are always logged. The
+  // model's whole draft is logged too only when this is "true" (trimmed, any case): it is the
+  // customer's conversation, so it is off by default.
+  guardrailLogDrafts: (process.env.GUARDRAIL_LOG_DRAFTS || '').trim().toLowerCase() === 'true',
   sqlitePath: process.env.SQLITE_PATH || DEFAULT_SQLITE_PATH,
   chromaHost: process.env.CHROMA_HOST || 'localhost',
   chromaPort: Number(process.env.CHROMA_PORT) || 8000,
