@@ -128,7 +128,7 @@ provider, with tokens and latency recorded per case).
 
 Measured directly, not estimated:
 
-- **348** automated tests, all passing, offline (no key, no Chroma, no network).
+- **349** automated tests, all passing, offline (no key, no Chroma, no network).
 - **21/21** evaluation cases pass in mock mode: tool selection 14/14, signal detection 16/16,
   grounded answers 11/11, unsupported answers 1/1, guardrail/safety 10/10, hallucination 0/18. A
   mock run replays scripted answers, so this is a regression check on the harness and the
