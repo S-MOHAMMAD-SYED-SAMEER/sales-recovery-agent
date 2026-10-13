@@ -102,6 +102,50 @@ test('returns 502 and does not persist a partial turn when the LLM provider fail
   assert.deepEqual(store.getHistory('s1'), []);
 });
 
+for (const [label, text] of [
+  ['undefined', undefined],
+  ['null', null],
+  ['an empty string', ''],
+  ['whitespace only', '  \n '],
+  ['a non-string', 42],
+]) {
+  test(`returns 502 and persists nothing when the model returns ${label} as its reply`, async () => {
+    const store = freshStore();
+    const result = await handleChat(
+      { sessionId: 's1', message: 'hello' },
+      { conversationStore: store, generateReply: async () => ({ text, toolsUsed: [] }) }
+    );
+
+    assert.equal(result.status, 502);
+    assert.equal(result.body.reply, undefined);
+    assert.ok(result.body.error);
+    assert.deepEqual(store.getHistory('s1'), []);
+  });
+}
+
+test('a failed empty turn does not poison the next turn in the same session', async () => {
+  const store = freshStore();
+  await handleChat(
+    { sessionId: 's1', message: 'first' },
+    { conversationStore: store, generateReply: async () => ({ text: '', toolsUsed: [] }) }
+  );
+
+  let received;
+  const result = await handleChat(
+    { sessionId: 's1', message: 'second' },
+    {
+      conversationStore: store,
+      generateReply: async ({ messages }) => {
+        received = messages;
+        return { text: 'fine', toolsUsed: [] };
+      },
+    }
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(received, [{ role: 'user', content: 'second' }]);
+});
+
 test('degrades gracefully and still answers when the conversation store fails', async () => {
   const brokenStore = {
     getHistory: () => {

@@ -82,6 +82,14 @@ export async function handleChat({ sessionId, message }, deps = {}) {
       systemPrompt,
       messages: [...history, { role: 'user', content: message }],
     });
+    // A blocked, truncated-to-nothing or otherwise empty model turn is a
+    // failed turn, not a reply. Left alone it would reach the guardrails (which
+    // find nothing to object to in an empty string), be returned as a blank or
+    // missing `reply`, and be persisted into history. Handling it as a provider
+    // failure gives it the same 502 and the same "nothing is persisted" outcome.
+    if (typeof result?.text !== 'string' || !result.text.trim()) {
+      throw new Error('The model returned no reply text.');
+    }
     text = result.text;
     toolsUsed = result.toolsUsed || [];
   } catch (err) {
