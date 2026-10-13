@@ -62,6 +62,7 @@ export function createAnthropicProvider({
   model,
   maxOutputTokens,
   temperature = DEFAULT_TEMPERATURE,
+  clock = () => performance.now(),
   log = console,
 }) {
   async function generateReply({ systemPrompt, messages, tools = [], executeTool }) {
@@ -73,6 +74,7 @@ export function createAnthropicProvider({
     const initialState = messages.map((m) => ({ role: m.role, content: m.content }));
 
     const callModel = async (conversation) => {
+      const startedAt = clock();
       const response = await anthropicClient.messages.create({
         model,
         max_tokens: maxOutputTokens,
@@ -96,7 +98,26 @@ export function createAnthropicProvider({
 
       checkResponse(response, text, functionCalls, { warn: (m) => log.warn(m) });
 
-      return { text, functionCalls, modelContent: response.content };
+      const inputTokens = response.usage?.input_tokens;
+      const outputTokens = response.usage?.output_tokens;
+
+      return {
+        text,
+        functionCalls,
+        modelContent: response.content,
+        // Wall-clock time includes the SDK's own retries.
+        usage: {
+          model,
+          inputTokens,
+          outputTokens,
+          totalTokens:
+            typeof inputTokens === 'number' && typeof outputTokens === 'number'
+              ? inputTokens + outputTokens
+              : undefined,
+          latencyMs: clock() - startedAt,
+          finishReason: response.stop_reason,
+        },
+      };
     };
 
     // Echoes the model's own content blocks back verbatim (rather than

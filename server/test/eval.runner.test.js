@@ -192,3 +192,35 @@ test('the real shipped 16-case dataset passes 16/16 in mock mode (harness self-c
     `expected all mock cases to pass; failures: ${JSON.stringify(result.cases.filter((c) => !c.passed).map((c) => c.id))}`
   );
 });
+
+test('mock mode records no usage, per case or for the run', async () => {
+  const result = await runEvaluation({ dataset: FIXTURE_DATASET, mode: 'mock' });
+  assert.equal(result.usage, null);
+  assert.ok(result.cases.every((c) => c.usage === null));
+});
+
+test("real mode records each case's usage and a run total", async () => {
+  let call = 0;
+  const generateReply = async () => {
+    call += 1;
+    return {
+      text: 'Shipping takes 7-12 business days.',
+      toolsUsed: [],
+      usage: {
+        calls: 1,
+        inputTokens: 100 * call,
+        outputTokens: 10,
+        thinkingTokens: null,
+        totalTokens: 100 * call + 10,
+        latencyMs: 50,
+      },
+    };
+  };
+  const result = await runEvaluation({ dataset: FIXTURE_DATASET, mode: 'real', generateReply });
+
+  assert.equal(result.cases[0].usage.inputTokens, 100);
+  assert.equal(result.cases[1].usage.inputTokens, 200);
+  assert.equal(result.usage.calls, 3);
+  assert.equal(result.usage.inputTokens, 600);
+  assert.equal(result.usage.latencyMs, 150);
+});

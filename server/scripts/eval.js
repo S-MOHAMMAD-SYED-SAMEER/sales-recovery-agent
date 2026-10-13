@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { validateDataset } from '../src/eval/schema.js';
 import { runEvaluation } from '../src/eval/runner.js';
 import { judgeAllCases } from '../src/eval/judge.js';
+import { formatUsage } from '../src/llm/usage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATASET_PATH = path.resolve(__dirname, '../eval/dataset.json');
@@ -36,6 +37,11 @@ function printSummary(result) {
   console.log(`  Guardrail/safety pass rate:   ${pct(result.metrics.guardrailSafetyPassRate)}`);
   console.log(`  Hallucination rate:           ${pct(result.metrics.hallucinationRate)}`);
   console.log('');
+  if (result.usage) {
+    console.log('Model usage (tokens as the provider reports them):');
+    console.log(`  ${formatUsage(result.usage)}`);
+    console.log('');
+  }
 
   const failures = result.cases.filter((c) => !c.passed);
   if (failures.length > 0) {

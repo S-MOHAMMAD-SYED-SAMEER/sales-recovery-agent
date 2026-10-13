@@ -252,3 +252,32 @@ test('without a client the adapter says the key is missing', async () => {
     /GEMINI_API_KEY is not set/
   );
 });
+
+test('records tokens, latency and attempts for each model call', async () => {
+  const ticks = [1000, 1450];
+  const response = textResponse('hi', {
+    usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 15, thoughtsTokenCount: 40, totalTokenCount: 175 },
+  });
+  const client = fakeClient([httpError(503), response]);
+  const { generateReply } = provider(client, { clock: () => ticks.shift() });
+
+  const result = await generateReply({ systemPrompt: 's', messages: userTurn, executeTool: noTools });
+
+  assert.equal(result.usage.calls, 1);
+  assert.equal(result.usage.inputTokens, 120);
+  assert.equal(result.usage.outputTokens, 15);
+  assert.equal(result.usage.thinkingTokens, 40);
+  assert.equal(result.usage.totalTokens, 175);
+  assert.equal(result.usage.latencyMs, 450);
+  assert.equal(result.usage.perCall[0].attempts, 2);
+  assert.equal(result.usage.perCall[0].model, 'gemini-test-model');
+  assert.equal(result.usage.perCall[0].finishReason, 'STOP');
+});
+
+test('a response with no usage metadata still returns, with null token counts', async () => {
+  const client = fakeClient([textResponse('hi')]);
+  const { generateReply } = provider(client);
+  const result = await generateReply({ systemPrompt: 's', messages: userTurn, executeTool: noTools });
+  assert.equal(result.text, 'hi');
+  assert.equal(result.usage.inputTokens, null);
+});
