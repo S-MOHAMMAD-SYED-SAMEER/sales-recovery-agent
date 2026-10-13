@@ -7,7 +7,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "demo": "node scripts/demo.js",
-    "test": "node --test",
+    "test": "node --env-file=test/test.env --test",
     "ingest": "node scripts/ingest.js",
     "eval": "node scripts/eval.js",
     "eval:real": "node scripts/eval.js --real",
