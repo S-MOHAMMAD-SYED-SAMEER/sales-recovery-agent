@@ -35,13 +35,22 @@ connection that time.
 
 | | Status |
 |---|---|
-| Automated tests | **349 tests, all passing** (`cd server && npm test`). No API key, no Chroma and no network needed |
-| Evaluation, mock mode | **21/21** (`npm run eval`). The mock replays each case's own scripted answer, so it checks the harness and the code around the model (guardrails, signals, memory, grading), **not a model** |
-| Evaluation, real model | **To be re-run.** An earlier run on Gemini was reported but its output was not kept, so no result is claimed here. `npm run eval:real` produces a recorded one |
-| Gemini adapter | Implemented and unit-tested against a fake client. The live call path has not been exercised since the adapter was hardened |
+| Automated tests | **367 tests, all passing** (`cd server && npm test`). No API key, no Chroma and no network needed |
+| Evaluation, mock mode | **21/21** (`npm run eval`). The mock replays each case's own scripted answer, so it checks the harness and the code around the model, **not a model** |
+| **Evaluation, real model** | **Gemini `gemini-3.5-flash-lite`, 2026-10-13, two independent runs of the 21 cases.** Run 1: **18/21 (85.7%)**; all three failures were correct replies the grader mis-scored, fixed in dataset 1.2.0. Run 2, on the corrected grader: **21/21**. 34 calls and about 29,000 tokens each. Recorded in [`docs/results/`](./docs/results/2026-10-13-summary.md) |
+| LLM judge (subjective, never scored) | "Grounded" 15/21, "safe" 19/21. The judge is shown only the question and the reply, not the tool result, so it marks tool-backed answers "ungrounded" |
+| Guardrails on the real model | The first capture (41 drafts) found **2 false positives (4.9%)**: a refusal that repeated "50% off" and an offer to "check if something is in stock", the latter being the "I'm still deciding" misfire. Fixed: **0/41**, and **0/13** on 15 held-out prompts. **Known gap:** an unsupported claim about promotions is not caught (2 of 2 in the held-out set) |
+| Prompt injection | 10 new attempts on the real model, **10/10 held**; the API key appeared in none of the replies |
+| Gemini free tier | **15 generate requests per minute** for this model (read from a 429). A reply is not held for a longer wait: the adapter fails fast |
+| Gemini adapter | Run live (smoke test, evaluation, 429 probe) |
 | Anthropic adapter | **Implemented, not yet run** against the live API |
 | Hosted instance | None. See [docs/HOSTING.md](./docs/HOSTING.md) to host your own |
 | Chroma | Tested with server 1.5.9 and the `chromadb` JS client 3.5.0 |
+
+A real reply, from the live Gemini model on 2026-10-13: the hesitation signal is detected, the agent checks the
+store's return policy and reassures the customer without inventing a discount.
+
+![A real Gemini conversation: a stock question answered from a tool, then a hesitating buyer reassured with the real 30-day return policy](./docs/images/real-recovery.png)
 
 ## How it works
 
@@ -139,14 +148,16 @@ Copy `server/.env.example` to `server/.env`. Every variable is optional with the
 ```
 cd server
 npm test                  # unit and integration tests, offline
+npm run smoke             # one real question through the whole flow (needs the provider's key)
 npm run eval              # mock mode: free, deterministic, no key, no Chroma
 npm run eval:real         # real model: needs the provider's key and a running Chroma
+npm run eval:record       # the same, and saves it under docs/results/ with date, model and dataset version
 npm run eval:real:judge   # also asks the model to grade each reply (subjective, never scored)
 ```
 
 `npm test` uses Node's built-in runner against an in-memory database, a fake vector store and fake
 model clients (a fake clock for retries). The evaluation harness drives the real `handleChat`
-through `server/eval/dataset.json` (version 1.1.0, 21 cases: RAG, tools, signals, safety including
+through `server/eval/dataset.json` (version 1.2.0, 21 cases: RAG, tools, signals, safety including
 five injection and refusal cases, memory, mixed). Every metric is a deterministic comparison: sets
 for tools and signals, keywords for groundedness, regexes for forbidden content. Each real run
 writes `server/eval-results/<timestamp>-<mode>.json` (gitignored) with per-case results and token
@@ -191,7 +202,11 @@ PROJECT-1.md             the case-study write-up
 - Signal detection and guardrails are regex patterns over English text.
 - The `demo` provider is not a model. It understands a fixed set of questions and answers anything
   else with a fixed "choose one of the examples" reply.
-- A free-tier model has request limits that this repo does not verify; see your provider's console.
+- The Gemini free tier allows 15 generate requests a minute for the default model (verified on 2026-10-13); other
+  models and providers have their own limits.
+- The guardrails catch a discount claim only when it names a percentage or a code, so an unsupported statement
+  such as "we occasionally run promotions" gets through (measured: 2 of 2 in a held-out sample). A stock claim is
+  caught, and a refusal or an offer is no longer mistaken for one.
 
 See [PROJECT-1.md](./PROJECT-1.md) for the design decisions behind it and
 [docs/HOSTING.md](./docs/HOSTING.md) to host your own copy.
