@@ -20,12 +20,38 @@ const REQUIRED_VARS_BY_PROVIDER = {
 const requiredVars = REQUIRED_VARS_BY_PROVIDER[provider] || [];
 const missing = requiredVars.filter((key) => !process.env[key]);
 
+function positiveInt(raw, fallback) {
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+function nonNegativeInt(raw, fallback) {
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+}
+
+function optionalNumber(raw) {
+  if (raw === undefined || String(raw).trim() === '') return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
 export const config = {
   port: process.env.PORT || 3000,
   llmProvider: provider,
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  anthropicModel: process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001',
+  // Model-call limits, shared by both providers (see llm/providers/). The
+  // timeout applies to each attempt; retries are extra attempts on a 429, a 5xx
+  // or a dropped connection. maxOutputTokens counts a thinking model's
+  // reasoning tokens too, so it is not set tight. Temperature is left to each
+  // adapter's own default unless LLM_TEMPERATURE is set.
+  llmTimeoutMs: positiveInt(process.env.LLM_TIMEOUT_MS, 30_000),
+  llmMaxRetries: nonNegativeInt(process.env.LLM_MAX_RETRIES, 2),
+  llmMaxOutputTokens: positiveInt(process.env.LLM_MAX_OUTPUT_TOKENS, 1024),
+  llmTemperature: optionalNumber(process.env.LLM_TEMPERATURE),
   sqlitePath: process.env.SQLITE_PATH || DEFAULT_SQLITE_PATH,
   chromaHost: process.env.CHROMA_HOST || 'localhost',
   chromaPort: Number(process.env.CHROMA_PORT) || 8000,

@@ -75,3 +75,48 @@ test('explicit Chroma host/port/collection still override the defaults', async (
   assert.equal(config.chromaSsl, true);
   assert.equal(config.chromaCollection, 'sales_recovery_kb');
 });
+
+
+test('the model-call limits have safe defaults', async () => {
+  const config = await loadConfig({
+    LLM_TIMEOUT_MS: undefined,
+    LLM_MAX_RETRIES: undefined,
+    LLM_MAX_OUTPUT_TOKENS: undefined,
+    LLM_TEMPERATURE: undefined,
+    ANTHROPIC_MODEL: undefined,
+  });
+  assert.equal(config.llmTimeoutMs, 30_000);
+  assert.equal(config.llmMaxRetries, 2);
+  assert.equal(config.llmMaxOutputTokens, 1024);
+  assert.equal(config.llmTemperature, undefined);
+  assert.equal(config.anthropicModel, 'claude-haiku-4-5-20251001');
+});
+
+test('the model-call limits can be set from the environment, including zero retries and temperature 0', async () => {
+  const config = await loadConfig({
+    LLM_TIMEOUT_MS: '5000',
+    LLM_MAX_RETRIES: '0',
+    LLM_MAX_OUTPUT_TOKENS: '256',
+    LLM_TEMPERATURE: '0',
+    ANTHROPIC_MODEL: 'claude-some-other-model',
+  });
+  assert.equal(config.llmTimeoutMs, 5000);
+  assert.equal(config.llmMaxRetries, 0);
+  assert.equal(config.llmMaxOutputTokens, 256);
+  assert.equal(config.llmTemperature, 0);
+  assert.equal(config.anthropicModel, 'claude-some-other-model');
+});
+
+test('nonsense limit values fall back to the defaults', async () => {
+  const config = await loadConfig({
+    LLM_TIMEOUT_MS: 'soon',
+    LLM_MAX_RETRIES: '-3',
+    LLM_MAX_OUTPUT_TOKENS: '0',
+    LLM_TEMPERATURE: 'warm',
+    ANTHROPIC_MODEL: undefined,
+  });
+  assert.equal(config.llmTimeoutMs, 30_000);
+  assert.equal(config.llmMaxRetries, 2);
+  assert.equal(config.llmMaxOutputTokens, 1024);
+  assert.equal(config.llmTemperature, undefined);
+});
