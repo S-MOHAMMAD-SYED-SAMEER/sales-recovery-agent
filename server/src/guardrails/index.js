@@ -9,23 +9,26 @@ export const SAFE_FALLBACK_REPLY =
   'correct. Let me connect you with our support team, who can help directly.';
 
 // Runs every policy against the reply produced this turn. Returns
-// { safe: true } or { safe: false, violations: [{ name, description, reason }] }
+// { safe: true } or { safe: false, violations: [{ name, description, reason, rule?, matched?, clause? }] }
 // — never throws, so a bug in one policy can't take down the whole request;
 // see validateReply's own try/catch for that.
 function checkPolicies(context) {
   const violations = [];
 
   for (const policy of POLICIES) {
-    let reason;
+    let result;
     try {
-      reason = policy.check(context);
+      result = policy.check(context);
     } catch (err) {
       // A policy itself misbehaving is treated as a violation, not a
       // silent pass — failing safe applies to the guardrail code too.
-      reason = `Guardrail check "${policy.name}" threw: ${err.message}`;
+      result = { reason: `Guardrail check "${policy.name}" threw: ${err.message}`, rule: 'policy-threw' };
     }
-    if (reason) {
-      violations.push({ name: policy.name, description: policy.description, reason });
+    if (result) {
+      // A policy returns a bare reason string, or { reason, rule, matched, clause }: which rule
+      // inside the policy fired and the phrase that triggered it.
+      const detail = typeof result === 'string' ? { reason: result } : result;
+      violations.push({ name: policy.name, description: policy.description, ...detail });
     }
   }
 

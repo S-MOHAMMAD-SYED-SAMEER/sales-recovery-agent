@@ -142,6 +142,7 @@ Copy `server/.env.example` to `server/.env`. Every variable is optional with the
 | `CHROMA_HOST`, `CHROMA_PORT`, `CHROMA_SSL`, `CHROMA_COLLECTION` | `localhost`, `8000`, `false`, `sales_recovery_kb` | |
 | `KB_DIR` | `server/data/kb` | |
 | `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS` | `30`, `60000` | Per client IP, `POST /api/chat` only |
+| `GUARDRAIL_LOG_DRAFTS` | off | `true` also logs the whole draft of a blocked reply. The policy and matched phrase are always logged |
 | `EVAL_DELAY_MS` | `8000` | Pause between cases and judge calls in `eval:real` |
 
 `POST /api/chat` takes `{ sessionId, message }` (`sessionId`: 1-64 characters of letters, digits,

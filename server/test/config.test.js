@@ -120,3 +120,15 @@ test('nonsense limit values fall back to the defaults', async () => {
   assert.equal(config.llmMaxOutputTokens, 1024);
   assert.equal(config.llmTemperature, undefined);
 });
+
+
+test('guardrailLogDrafts is off by default and on only for "true"', async () => {
+  assert.equal((await loadConfig({ GUARDRAIL_LOG_DRAFTS: undefined })).guardrailLogDrafts, false);
+  assert.equal((await loadConfig({ GUARDRAIL_LOG_DRAFTS: '' })).guardrailLogDrafts, false);
+  for (const value of ['true', 'TRUE', ' true ']) {
+    assert.equal((await loadConfig({ GUARDRAIL_LOG_DRAFTS: value })).guardrailLogDrafts, true, value);
+  }
+  for (const value of ['yes', '1', 'false', 'on']) {
+    assert.equal((await loadConfig({ GUARDRAIL_LOG_DRAFTS: value })).guardrailLogDrafts, false, value);
+  }
+});

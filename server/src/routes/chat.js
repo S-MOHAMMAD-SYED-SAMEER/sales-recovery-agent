@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { isConfigured } from '../config/env.js';
+import { config, isConfigured } from '../config/env.js';
 import { generateReply as defaultGenerateReply } from '../llm/index.js';
 import { conversationStore as defaultConversationStore } from '../memory/index.js';
 import { detectSignals, buildSignalDirective } from '../signals/index.js';
@@ -129,10 +129,18 @@ export async function handleChat({ sessionId, message }, deps = {}) {
 
   const guardrailResult = validateReply({ reply: text, toolsUsed });
   if (!guardrailResult.safe) {
-    console.warn(
-      '[guardrails] Blocked an unsafe reply:',
-      guardrailResult.violations.map((v) => v.name).join(', ')
-    );
+    // Always the policy and what matched: enough to tell a right block from a wrong one.
+    for (const v of guardrailResult.violations) {
+      console.warn(
+        `[guardrails] Blocked an unsafe reply: ${v.name}${v.rule ? ` (rule: ${v.rule})` : ''}` +
+          (v.matched ? ` matched ${JSON.stringify(v.matched)}` : '') +
+          (v.clause ? ` in clause ${JSON.stringify(v.clause)}` : '')
+      );
+    }
+    // The whole draft only on request: it is the conversation.
+    if (config.guardrailLogDrafts) {
+      console.warn(`[guardrails] Blocked draft (GUARDRAIL_LOG_DRAFTS=true): ${JSON.stringify(text)}`);
+    }
   }
   const finalReply = guardrailResult.finalReply;
 
@@ -159,7 +167,13 @@ export async function handleChat({ sessionId, message }, deps = {}) {
   // a block that was right from one that was not; it is never sent to the client.
   const guardrail = {
     safe: guardrailResult.safe,
-    violations: guardrailResult.violations.map((v) => ({ name: v.name, reason: v.reason })),
+    violations: guardrailResult.violations.map((v) => ({
+      name: v.name,
+      reason: v.reason,
+      ...(v.rule ? { rule: v.rule } : {}),
+      ...(v.matched ? { matched: v.matched } : {}),
+      ...(v.clause ? { clause: v.clause } : {}),
+    })),
     draft: text,
   };
 
