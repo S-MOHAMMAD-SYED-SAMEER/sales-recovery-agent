@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleChat } from '../src/routes/chat.js';
+import { handleChat, MAX_MESSAGE_CHARS } from '../src/routes/chat.js';
 import { createDb } from '../src/memory/db.js';
 import { createConversationStore } from '../src/memory/conversationStore.js';
 
@@ -37,6 +37,21 @@ test('rejects a request with no sessionId', async () => {
     { conversationStore: store, generateReply: stubReply('unused') }
   );
   assert.equal(result.status, 400);
+});
+
+test('rejects a sessionId that is not a short plain string, and a message over the length cap', async () => {
+  const store = freshStore();
+  const deps = { conversationStore: store, generateReply: stubReply('unused') };
+
+  for (const sessionId of [{ a: 1 }, 5, 'has space', 'a'.repeat(65)]) {
+    const result = await handleChat({ sessionId, message: 'hi' }, deps);
+    assert.equal(result.status, 400, JSON.stringify(sessionId));
+  }
+
+  const tooLong = await handleChat({ sessionId: 's1', message: 'a'.repeat(MAX_MESSAGE_CHARS + 1) }, deps);
+  assert.equal(tooLong.status, 400);
+  const atLimit = await handleChat({ sessionId: 's1', message: 'a'.repeat(MAX_MESSAGE_CHARS) }, deps);
+  assert.equal(atLimit.status, 200);
 });
 
 test('passes prior conversation history to generateReply and persists the new turn', async () => {
