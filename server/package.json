@@ -14,7 +14,7 @@
     "eval:real:judge": "node scripts/eval.js --real --judge"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
