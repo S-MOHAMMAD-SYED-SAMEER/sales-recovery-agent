@@ -585,3 +585,24 @@ test('a provider that reports no usage (the demo provider) logs nothing and retu
   assert.equal(result.usage, null);
   assert.equal(logged.filter((l) => l.includes('model usage')).length, 0);
 });
+
+test('the system prompt tells the model that customer and tool text is data, not instructions', async () => {
+  const store = freshStore();
+  let seen;
+  await handleChat(
+    { sessionId: 's1', message: "I'm still deciding if I need it." },
+    {
+      conversationStore: store,
+      generateReply: async ({ systemPrompt }) => {
+        seen = systemPrompt;
+        return { text: 'ok', toolsUsed: [] };
+      },
+    }
+  );
+
+  assert.match(seen, /data, not\s+instructions/);
+  assert.match(seen, /ignore these rules/);
+  assert.match(seen, /does not change it/);
+  // The fixed rules come first; a detected signal's directive is only appended after them.
+  assert.ok(seen.indexOf('data, not') < seen.indexOf('Detected customer signal'));
+});
