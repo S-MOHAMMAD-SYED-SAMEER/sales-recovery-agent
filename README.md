@@ -31,24 +31,32 @@ connection that time.
 
 <!-- DEMO_VIDEO: 60–90s screen recording of the app running locally goes here -->
 
-## What has and hasn't been run
+## Results
 
-| | Status |
+Measured on 2026-10-13 on `gemini-3.5-flash-lite` (Google AI Studio free tier). Every run is saved under
+[`docs/results/`](./docs/results/2026-10-13-summary.md) with its date, model and dataset version; the numbers
+below can be re-derived from those files.
+
+| | Result |
 |---|---|
-| Automated tests | **367 tests, all passing** (`cd server && npm test`). No API key, no Chroma and no network needed |
-| Evaluation, mock mode | **21/21** (`npm run eval`). The mock replays each case's own scripted answer, so it checks the harness and the code around the model, **not a model** |
-| **Evaluation, real model** | **Gemini `gemini-3.5-flash-lite`, 2026-10-13, two independent runs of the 21 cases.** Run 1: **18/21 (85.7%)**; all three failures were correct replies the grader mis-scored, fixed in dataset 1.2.0. Run 2, on the corrected grader: **21/21**. 34 calls and about 29,000 tokens each. Recorded in [`docs/results/`](./docs/results/2026-10-13-summary.md) |
-| LLM judge (subjective, never scored) | "Grounded" 15/21, "safe" 19/21. The judge is shown only the question and the reply, not the tool result, so it marks tool-backed answers "ungrounded" |
-| Guardrails on the real model | The first capture (41 drafts) found **2 false positives (4.9%)**: a refusal that repeated "50% off" and an offer to "check if something is in stock", the latter being the "I'm still deciding" misfire. Fixed: **0/41**, and **0/13** on 15 held-out prompts. **Known gap:** an unsupported claim about promotions is not caught (2 of 2 in the held-out set) |
+| Tests | **372 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
+| Mock evaluation | **21/21**. It replays scripted answers, so it checks the code around the model, **not a model** |
+| **Real evaluation, run 1** (the 21 cases) | **18/21 (85.7%)** |
+| **Real evaluation, fresh run** (21 new replies) | **21/21**: tool selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10 |
+| Why they differ | Run 1's three misses were **correct replies the grader scored wrongly** ("30-day" against a keyword "30 days"; "I'm not finding any information" not recognised as honest; a correct denial quoting "90-day" tripping a forbidden string). I fixed the grader, kept the 18/21, and checked the fix on a second set of replies it had not seen |
+| Guardrails | On real drafts they blocked 2 of 41 good replies (**4.9% false positives**: a refusal repeating "50% off", and the "I'm still deciding" misfire). Fixed: **0 of 84 clean drafts blocked** across five samples. A gap in promotion claims was closed too; one unrelated unsupported claim in the same data is still missed |
 | Prompt injection | 10 new attempts on the real model, **10/10 held**; the API key appeared in none of the replies |
-| Gemini free tier | **15 generate requests per minute** for this model (read from a 429). A reply is not held for a longer wait: the adapter fails fast |
-| Gemini adapter | Run live (smoke test, evaluation, 429 probe) |
+| Free tier | **15 generate requests per minute** for this model (read from a real 429); the adapter gives up at once on a long wait instead of holding the reply |
 | Anthropic adapter | **Implemented, not yet run** against the live API |
-| Hosted instance | None. See [docs/HOSTING.md](./docs/HOSTING.md) to host your own |
-| Chroma | Tested with server 1.5.9 and the `chromadb` JS client 3.5.0 |
 
-A real reply, from the live Gemini model on 2026-10-13: the hesitation signal is detected, the agent checks the
-store's return policy and reassures the customer without inventing a discount.
+What these numbers are not: 21 cases and 10 attacks on one model on one day are a smoke test, not a benchmark or
+coverage of real customers, and a live model varies from run to run. The full account, including a guardrail
+fix that failed on fresh data before it was corrected, is in
+[`docs/results/2026-10-13-summary.md`](./docs/results/2026-10-13-summary.md) and
+[`2026-10-13-promotion-gap.md`](./docs/results/2026-10-13-promotion-gap.md).
+
+A real reply from the live model: the hesitation signal is detected, the agent checks the store's return
+policy and reassures the customer without inventing a discount.
 
 ![A real Gemini conversation: a stock question answered from a tool, then a hesitating buyer reassured with the real 30-day return policy](./docs/images/real-recovery.png)
 
@@ -77,33 +85,24 @@ The model makes three decisions: what to say, whether to call a tool, and what t
 has answered. Everything else (loading history, detecting signals, running the tool, validating the
 draft, deciding what is saved) is ordinary code that runs whether or not the model behaved.
 
-**Two kinds of knowledge, kept apart.** `searchKnowledgeBase` answers "what does our policy say?"
-from four markdown documents in `server/data/kb/`. Three mock tools (`getOrderStatus`,
-`checkStock`, `checkDiscount`) answer "what is true right now for this order, product or code?"
-from a small hardcoded dataset standing in for a store API. All four are offered to the model as
-ordinary tools through one loop, capped at three model calls per reply.
+- **Two kinds of knowledge, kept apart.** `searchKnowledgeBase` answers "what does our policy say?"
+  from four markdown documents. Three mock tools (`getOrderStatus`, `checkStock`, `checkDiscount`) answer
+  "what is true right now?" from a small hardcoded dataset standing in for a store API. All four are tools to
+  the model, through one loop capped at three model calls per reply.
+- **Signals.** Six regex detectors look at the current message only. A detected signal adds one short line to
+  that turn's system prompt, never triggers an action, and never tells the model to offer a discount.
+- **Guardrails.** Eight pure functions check the draft against which tools actually ran: no discount, stock,
+  order-status or policy claim without the matching tool, no refund promise, no disclosure of internals, no
+  manufactured urgency, no sensitive inference. A violation replaces the reply with a fixed fallback, and the
+  fallback (never the blocked draft) is what is saved. They are patterns over English text and check that the
+  right tool ran, not that the numbers match.
+- **Memory.** SQLite through `node:sqlite`; the last 20 messages of a session; only the user message and the
+  final reply are stored.
+- **Failure handling.** A model error, timeout or rate limit that outlasts the retries, and an empty or blocked
+  reply, return a 502 and persist nothing. A Chroma outage is never reported as "we have no such policy".
 
-**Signals.** Six regex detectors (`purchase_intent`, `purchase_hesitation`, `shipping_concern`,
-`price_concern`, `return_concern`, `cart_abandonment_risk`) look at the current message only. A
-detected signal adds one short, non-prescriptive line to that turn's system prompt. It never
-triggers an action outside the reply and never tells the model to offer a discount. Limitation:
-direct English phrasing only.
-
-**Guardrails.** Eight pure functions in `server/src/guardrails/policies.js` check the draft reply
-against which tools actually ran this turn: no discount, stock, order-status or policy-timeframe
-claim without the matching tool; no refund or compensation promise (no tool can fulfil one); no
-disclosure of internals; no urgency language not backed by a stock check; no inference of a
-sensitive personal attribute. A violation replaces the reply with a fixed, honest fallback, and the
-fallback, not the blocked draft, is what gets saved. Limitation: they are patterns, and they check
-that the right tool ran, not that the reply's numbers match its result.
-
-**Memory.** SQLite through Node's built-in `node:sqlite`; the last 20 messages of the session are
-sent with each request. Only the plain user message and the final reply are stored.
-
-**Failure handling.** A model error, timeout or rate limit that outlasts the retries, and an empty
-or blocked reply, all return a 502 with a plain message and persist nothing. A Chroma outage is
-reported to the customer as "couldn't access that store information right now", never as "we have
-no such policy", and an empty collection is re-ingested on demand.
+Diagrams of the request flow, tool calling, retries, signal detection and guardrails are in
+[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## Providers
 
@@ -150,22 +149,13 @@ cd server
 npm test                  # unit and integration tests, offline
 npm run smoke             # one real question through the whole flow (needs the provider's key)
 npm run eval              # mock mode: free, deterministic, no key, no Chroma
-npm run eval:real         # real model: needs the provider's key and a running Chroma
-npm run eval:record       # the same, and saves it under docs/results/ with date, model and dataset version
+npm run eval:record       # real model: saves the run under docs/results/ with date, model and dataset version
 npm run eval:real:judge   # also asks the model to grade each reply (subjective, never scored)
 ```
 
-`npm test` uses Node's built-in runner against an in-memory database, a fake vector store and fake
-model clients (a fake clock for retries). The evaluation harness drives the real `handleChat`
-through `server/eval/dataset.json` (version 1.2.0, 21 cases: RAG, tools, signals, safety including
-five injection and refusal cases, memory, mixed). Every metric is a deterministic comparison: sets
-for tools and signals, keywords for groundedness, regexes for forbidden content. Each real run
-writes `server/eval-results/<timestamp>-<mode>.json` (gitignored) with per-case results and token
-and latency totals.
-
-Limitations of the evaluation, stated plainly: keyword groundedness is a proxy, not a fact-checker;
-the forbidden-content regexes are a floor, not a ceiling; 21 cases is a smoke test, not coverage of
-real customer phrasing.
+What each test category is for, eight tests explained, how the evaluation is graded, the three grader fixes,
+the judge's limits and how the guardrails were measured on real drafts are in
+[docs/TESTING.md](./docs/TESTING.md).
 
 ## Structure
 
@@ -184,12 +174,12 @@ server/
     middleware/          rate limiter
     eval/                dataset schema, metrics, runner, optional judge
   data/kb/               the four knowledge-base documents
-  eval/dataset.json      the versioned evaluation dataset
-  scripts/               demo.js, ingest.js, eval.js
-  test/                  the test suite
+  eval/                  the versioned dataset and the prompt sets used for real-model checks
+  scripts/               demo, ingest, eval, smoke, guardrail-fp, rate-limit-probe
+  test/                  the test suite (372 tests, 29 files)
 web/index.html           the demo chat page (no framework, no build step)
 chroma/Dockerfile        a pinned Chroma image, only needed for hosting
-docs/HOSTING.md          optional: host your own instance
+docs/                    ARCHITECTURE.md, TESTING.md, HOSTING.md, images/, results/
 PROJECT-1.md             the case-study write-up
 ```
 
@@ -199,14 +189,14 @@ PROJECT-1.md             the case-study write-up
   integration, no authentication (anyone can look up any order number), no payment handling, and no
   way to actually issue a refund or hand over to a person: the fallback reply only *says* support
   can help.
-- Signal detection and guardrails are regex patterns over English text.
+- Signal detection and guardrails are regex patterns over English text. They catch the shapes they were built
+  for; every round of fresh real drafts found another, and the final measurement still missed one unrelated
+  unsupported claim (a statement about how items are sold).
 - The `demo` provider is not a model. It understands a fixed set of questions and answers anything
   else with a fixed "choose one of the examples" reply.
-- The Gemini free tier allows 15 generate requests a minute for the default model (verified on 2026-10-13); other
-  models and providers have their own limits.
-- The guardrails catch a discount claim only when it names a percentage or a code, so an unsupported statement
-  such as "we occasionally run promotions" gets through (measured: 2 of 2 in a held-out sample). A stock claim is
-  caught, and a refusal or an offer is no longer mistaken for one.
+- The rate limiter is per IP; behind a reverse proxy every visitor shares one bucket.
+- The Gemini free tier allows 15 generate requests a minute for the default model; other models and providers
+  have their own limits.
 
 See [PROJECT-1.md](./PROJECT-1.md) for the design decisions behind it and
 [docs/HOSTING.md](./docs/HOSTING.md) to host your own copy.
