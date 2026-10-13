@@ -29,6 +29,12 @@ It runs on the fictional store's synthetic data with the deterministic `demo` pr
 key is needed**. The first run downloads a ~90 MB embedding model once, so it needs a network
 connection that time.
 
+To run the same stack against the **real Gemini model** instead, put `GEMINI_API_KEY` in `server/.env` and run
+`cd server && npm run live`. It does what `npm run demo` does (starts Chroma if needed, ingests, starts the app)
+with `LLM_PROVIDER=gemini`; it refuses to start, with a clear message, if the key is missing, and prints the
+provider and model (never the key) at startup. It spends your free-tier quota: 15 generate requests a minute for
+the default model, one to three per reply.
+
 <!-- DEMO_VIDEO: 60–90s screen recording of the app running locally goes here -->
 
 ## Results
@@ -147,6 +153,7 @@ Copy `server/.env.example` to `server/.env`. Every variable is optional with the
 ```
 cd server
 npm test                  # unit and integration tests, offline
+npm run live              # the whole stack against the real Gemini model (needs GEMINI_API_KEY)
 npm run smoke             # one real question through the whole flow (needs the provider's key)
 npm run eval              # mock mode: free, deterministic, no key, no Chroma
 npm run eval:record       # real model: saves the run under docs/results/ with date, model and dataset version
