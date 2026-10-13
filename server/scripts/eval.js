@@ -79,9 +79,11 @@ async function main() {
     ({ generateReply } = await import('../src/llm/index.js'));
   }
 
-  // The free-tier Gemini quota is 15 requests/minute; some cases make 2
-  // calls (the tool loop). Pacing cases avoids a 429 masquerading as an
-  // agent failure in the results. Override with EVAL_DELAY_MS if needed.
+  // Some free tiers cap requests per minute (the figure for the current
+  // Gemini model is not verified here), and some cases make 2 calls (the tool
+  // loop). Pacing cases, and the judge's calls after them, avoids a 429
+  // masquerading as an agent failure in the results. Override with
+  // EVAL_DELAY_MS if needed.
   const delayMsBetweenCases = useReal ? Number(process.env.EVAL_DELAY_MS) || 8000 : 0;
   if (useReal) {
     console.log(`Real mode: pacing ${delayMsBetweenCases}ms between cases to stay under the free-tier rate limit...`);
@@ -98,7 +100,7 @@ async function main() {
       judgeResults = await judgeAllCases(
         dataset,
         new Map(result.cases.map((c) => [c.id, c.actual])),
-        { generateReply }
+        { generateReply, delayMsBetweenCalls: delayMsBetweenCases }
       );
       printJudgeSummary(judgeResults);
     }

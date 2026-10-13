@@ -60,11 +60,26 @@ export async function judgeCase(evalCase, actualReply, { generateReply }) {
   }
 }
 
-export async function judgeAllCases(dataset, actualByCaseId, { generateReply }) {
+function defaultSleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// delayMsBetweenCalls: waited before every judge call after the first. The
+// judge makes one model call per case, back to back, which is exactly the
+// pattern that trips a free-tier requests-per-minute limit; eval.js passes the
+// same pacing the case run uses. Defaults to 0 so tests stay instant.
+export async function judgeAllCases(
+  dataset,
+  actualByCaseId,
+  { generateReply, delayMsBetweenCalls = 0, sleep = defaultSleep }
+) {
   const results = [];
   for (const evalCase of dataset.cases) {
     const actual = actualByCaseId.get(evalCase.id);
     if (!actual) continue;
+    if (results.length > 0 && delayMsBetweenCalls > 0) {
+      await sleep(delayMsBetweenCalls);
+    }
     results.push(await judgeCase(evalCase, actual.reply, { generateReply }));
   }
   return results;
