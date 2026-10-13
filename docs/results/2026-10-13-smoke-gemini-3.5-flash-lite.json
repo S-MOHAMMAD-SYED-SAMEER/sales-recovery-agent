@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-13T11:17:51.873Z",
+  "provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "question": "Is the Ceramic Mug in stock?",
+  "modelInfo": {
+    "name": "models/gemini-3.5-flash-lite",
+    "displayName": "Gemini 3.5 Flash Lite",
+    "inputTokenLimit": 1048576,
+    "outputTokenLimit": 65536,
+    "supportedActions": [
+      "generateContent",
+      "countTokens",
+      "createCachedContent",
+      "batchGenerateContent"
+    ]
+  },
+  "status": 200,
+  "reply": "Yes, the Ceramic Mug is currently in stock with 42 units available.",
+  "error": null,
+  "toolsUsed": [
+    "checkStock"
+  ],
+  "signals": [],
+  "usage": {
+    "calls": 2,
+    "inputTokens": 1523,
+    "outputTokens": 33,
+    "thinkingTokens": null,
+    "totalTokens": 1556,
+    "latencyMs": 2233.7264,
+    "perCall": [
+      {
+        "model": "gemini-3.5-flash-lite",
+        "inputTokens": 733,
+        "outputTokens": 17,
+        "totalTokens": 750,
+        "latencyMs": 1348.7498999999998,
+        "attempts": 1,
+        "finishReason": "STOP"
+      },
+      {
+        "model": "gemini-3.5-flash-lite",
+        "inputTokens": 790,
+        "outputTokens": 16,
+        "totalTokens": 806,
+        "latencyMs": 884.9765000000002,
+        "attempts": 1,
+        "finishReason": "STOP"
+      }
+    ]
+  },
+  "ok": true
+}
