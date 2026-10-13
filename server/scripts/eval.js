@@ -21,9 +21,14 @@ const useJudge = args.includes('--judge');
 //   with the judge, without re-running the cases (so no case calls are spent
 //   twice). Implies --real for the judge's own calls.
 const record = args.includes('--record');
+// --regrade=<results.json>: grade the replies an earlier real run saved against the
+//   current dataset and grader. No model is called, so it costs nothing; it is how a
+//   grader false negative is corrected without re-spending the calls.
+const regradeArg = args.find((a) => a.startsWith('--regrade='));
+const regradeFrom = regradeArg ? regradeArg.slice('--regrade='.length) : null;
 const judgeFromArg = args.find((a) => a.startsWith('--judge-from='));
 const judgeFrom = judgeFromArg ? judgeFromArg.slice('--judge-from='.length) : null;
-const mode = useReal || judgeFrom ? 'real' : 'mock';
+const mode = useReal || judgeFrom || regradeFrom ? 'real' : 'mock';
 
 function pct(ratio) {
   if (!ratio || ratio.value === null) return 'n/a (0 applicable cases)';
@@ -107,6 +112,47 @@ function recordedPath(kind, model, datasetVersion) {
 async function main() {
   const raw = JSON.parse(fs.readFileSync(DATASET_PATH, 'utf-8'));
   const dataset = validateDataset(raw);
+
+  if (regradeFrom) {
+    const prior = JSON.parse(fs.readFileSync(path.resolve(regradeFrom), 'utf-8'));
+    const { evaluateCase, aggregateMetrics } = await import('../src/eval/metrics.js');
+    const { combineUsage } = await import('../src/llm/usage.js');
+    const graded = [];
+    for (const evalCase of dataset.cases) {
+      const old = prior.cases.find((c) => c.id === evalCase.id);
+      if (!old) continue; // a case added since that run has no saved reply
+      graded.push(old.actual?.reply ? { ...evaluateCase(evalCase, old.actual), usage: old.usage ?? null } : old);
+    }
+    const result = {
+      datasetVersion: dataset.version,
+      mode: 'real',
+      ...aggregateMetrics(graded),
+      usage: combineUsage(graded.map((c) => c.usage)),
+      aborted: prior.aborted ?? null,
+      cases: graded,
+    };
+    console.log(`Re-grading ${graded.length} saved replies from the run of ${prior.meta?.date ?? 'unknown date'} (${prior.meta?.model ?? 'unknown model'}, dataset ${prior.datasetVersion}) against dataset ${dataset.version}. No model is called.`);
+    printSummary(result);
+    const out = {
+      meta: {
+        ...(prior.meta ?? {}),
+        regradedFrom: path.basename(regradeFrom),
+        regradedAt: new Date().toISOString(),
+        originalDatasetVersion: prior.datasetVersion,
+        datasetVersion: dataset.version,
+        note: 'The saved replies are unchanged; only the dataset and grader differ from the original run. Usage is the original run\'s.',
+      },
+      ...result,
+    };
+    if (record) {
+      const model = prior.meta?.model ?? 'unknown-model';
+      const outPath = recordedPath('eval-regrade', model, dataset.version);
+      fs.writeFileSync(outPath, JSON.stringify(out, null, 2) + '\n');
+      console.log(`Recorded ${path.relative(process.cwd(), outPath)}`);
+    }
+    process.exitCode = result.failed > 0 ? 1 : 0;
+    return;
+  }
 
   let generateReply;
   let runMeta = null;
