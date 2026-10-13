@@ -75,7 +75,8 @@ export async function judgeAllCases(
   const results = [];
   for (const evalCase of dataset.cases) {
     const actual = actualByCaseId.get(evalCase.id);
-    if (!actual) continue;
+    // No reply (the model never answered that case): nothing to grade.
+    if (!actual?.reply) continue;
     if (results.length > 0 && delayMsBetweenCalls > 0) {
       await sleep(delayMsBetweenCalls);
     }

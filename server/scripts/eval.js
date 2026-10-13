@@ -10,10 +10,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATASET_PATH = path.resolve(__dirname, '../eval/dataset.json');
 const RESULTS_DIR = path.resolve(__dirname, '../eval-results');
 
+const RECORD_DIR = path.resolve(__dirname, '../../docs/results');
+
 const args = process.argv.slice(2);
 const useReal = args.includes('--real');
 const useJudge = args.includes('--judge');
-const mode = useReal ? 'real' : 'mock';
+// --record: also save a real run under docs/results/ with its date, provider,
+//   model and dataset version, for the repo to keep.
+// --judge-from=<results.json>: grade the replies saved by an earlier real run
+//   with the judge, without re-running the cases (so no case calls are spent
+//   twice). Implies --real for the judge's own calls.
+const record = args.includes('--record');
+const judgeFromArg = args.find((a) => a.startsWith('--judge-from='));
+const judgeFrom = judgeFromArg ? judgeFromArg.slice('--judge-from='.length) : null;
+const mode = useReal || judgeFrom ? 'real' : 'mock';
 
 function pct(ratio) {
   if (!ratio || ratio.value === null) return 'n/a (0 applicable cases)';
@@ -76,49 +86,116 @@ function printJudgeSummary(judgeResults) {
   console.log('');
 }
 
+// Every string written to disk or the terminal below goes through this, so a key
+// can never end up in a recorded result even if a provider error echoed it.
+function redactSecrets(text, secrets) {
+  let out = text;
+  for (const secret of secrets.filter(Boolean)) out = out.split(secret).join('[redacted]');
+  return out;
+}
+
+function recordedPath(kind, model, datasetVersion) {
+  fs.mkdirSync(RECORD_DIR, { recursive: true });
+  const date = new Date().toISOString().slice(0, 10);
+  const safeModel = model.replace(/[^A-Za-z0-9.-]/g, '_');
+  const base = `${date}-${kind}-${safeModel}-dataset-${datasetVersion}`;
+  let candidate = path.join(RECORD_DIR, `${base}.json`);
+  for (let i = 2; fs.existsSync(candidate); i += 1) candidate = path.join(RECORD_DIR, `${base}-${i}.json`);
+  return candidate;
+}
+
 async function main() {
   const raw = JSON.parse(fs.readFileSync(DATASET_PATH, 'utf-8'));
   const dataset = validateDataset(raw);
 
   let generateReply;
-  if (useReal) {
+  let runMeta = null;
+  let secrets = [];
+  if (mode === 'real') {
     ({ generateReply } = await import('../src/llm/index.js'));
+    const { config } = await import('../src/config/env.js');
+    secrets = [config.geminiApiKey, config.anthropicApiKey];
+    runMeta = {
+      date: new Date().toISOString(),
+      provider: config.llmProvider,
+      model: config.llmProvider === 'gemini' ? config.geminiModel : config.anthropicModel,
+      datasetVersion: dataset.version,
+    };
   }
 
   // Some free tiers cap requests per minute (the figure for the current
-  // Gemini model is not verified here), and some cases make 2 calls (the tool
+  // Gemini model is not published), and some cases make 2 calls (the tool
   // loop). Pacing cases, and the judge's calls after them, avoids a 429
   // masquerading as an agent failure in the results. Override with
   // EVAL_DELAY_MS if needed.
-  const delayMsBetweenCases = useReal ? Number(process.env.EVAL_DELAY_MS) || 8000 : 0;
-  if (useReal) {
-    console.log(`Real mode: pacing ${delayMsBetweenCases}ms between cases to stay under the free-tier rate limit...`);
+  const delayMsBetweenCases = mode === 'real' ? Number(process.env.EVAL_DELAY_MS) || 8000 : 0;
+  if (mode === 'real') {
+    console.log(`Real mode (${runMeta.provider}, ${runMeta.model}): pacing ${delayMsBetweenCases}ms between calls to stay under the free-tier rate limit...`);
+    runMeta.delayMsBetweenCases = delayMsBetweenCases;
   }
 
-  const result = await runEvaluation({ dataset, mode, generateReply, delayMsBetweenCases });
+  // Judge-only: grade the saved replies of an earlier run; no case is re-run.
+  if (judgeFrom) {
+    const prior = JSON.parse(fs.readFileSync(path.resolve(judgeFrom), 'utf-8'));
+    const replies = new Map(prior.cases.filter((c) => c.actual?.reply).map((c) => [c.id, c.actual]));
+    console.log(`Judging ${replies.size} saved replies from ${path.basename(judgeFrom)} (run of ${prior.meta?.date ?? 'unknown date'}).`);
+    const judgeResults = await judgeAllCases(dataset, replies, { generateReply, delayMsBetweenCalls: delayMsBetweenCases });
+    printJudgeSummary(judgeResults);
+    const out = { meta: { ...runMeta, judgedRun: path.basename(judgeFrom) }, judge: judgeResults };
+    if (record) {
+      const outPath = recordedPath('judge', runMeta.model, dataset.version);
+      fs.writeFileSync(outPath, redactSecrets(JSON.stringify(out, null, 2), secrets) + '\n');
+      console.log(`Recorded ${path.relative(process.cwd(), outPath)}`);
+    }
+    return;
+  }
+
+  const result = await runEvaluation({
+    dataset,
+    mode,
+    generateReply,
+    delayMsBetweenCases,
+    // A quota or outage that retries could not clear will not clear on the next
+    // case either: stop instead of spending more calls.
+    maxConsecutiveProviderErrors: mode === 'real' ? 2 : 0,
+  });
   printSummary(result);
+  if (result.aborted) {
+    console.log(`RUN STOPPED EARLY: ${result.aborted.reason}`);
+    console.log(`  Last case: ${result.aborted.lastCase} (${result.aborted.lastError}); ${result.aborted.casesNotRun} case(s) not run.`);
+    console.log('');
+  }
 
   let judgeResults = null;
   if (useJudge) {
-    if (!useReal) {
+    if (mode !== 'real') {
       console.log('--judge only runs meaningful evaluations paired with --real; skipping.');
+    } else if (result.aborted) {
+      console.log('--judge skipped because the run stopped early.');
     } else {
       judgeResults = await judgeAllCases(
         dataset,
-        new Map(result.cases.map((c) => [c.id, c.actual])),
+        new Map(result.cases.filter((c) => c.actual?.reply).map((c) => [c.id, c.actual])),
         { generateReply, delayMsBetweenCalls: delayMsBetweenCases }
       );
       printJudgeSummary(judgeResults);
     }
   }
 
+  const output = JSON.stringify({ meta: runMeta, ...result, judge: judgeResults }, null, 2);
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const outPath = path.join(RESULTS_DIR, `${timestamp}-${mode}.json`);
-  fs.writeFileSync(outPath, JSON.stringify({ ...result, judge: judgeResults }, null, 2));
+  fs.writeFileSync(outPath, redactSecrets(output, secrets));
   console.log(`Full machine-readable results written to ${path.relative(process.cwd(), outPath)}`);
 
-  process.exitCode = result.failed > 0 ? 1 : 0;
+  if (record && mode === 'real') {
+    const recorded = recordedPath('eval-real', runMeta.model, dataset.version);
+    fs.writeFileSync(recorded, redactSecrets(output, secrets) + '\n');
+    console.log(`Recorded ${path.relative(process.cwd(), recorded)}`);
+  }
+
+  process.exitCode = result.aborted ? 2 : result.failed > 0 ? 1 : 0;
 }
 
 main().catch((err) => {
