@@ -33,9 +33,14 @@ export function execute(args) {
     throw new ToolValidationError('product is required and must be a non-empty string.');
   }
 
-  const needle = product.trim().toLowerCase();
+  // The SKU or the whole name, or the query's words appearing as whole words in
+  // a name ("mug" finds the Ceramic Mug). Not a substring match: "a" or "ug"
+  // would otherwise "find" a product.
+  const needle = product.trim().toLowerCase().replace(/\s+/g, ' ');
   const match = MOCK_PRODUCTS.find(
-    (p) => p.sku.toLowerCase() === needle || p.name.toLowerCase().includes(needle)
+    (p) =>
+      p.sku.toLowerCase() === needle ||
+      ` ${p.name.toLowerCase()} `.includes(` ${needle} `)
   );
 
   if (!match) {
