@@ -114,15 +114,16 @@ are pure functions that check the model's actual reply against what tools genuin
 enforced regardless of whether the model followed its instructions. The honest caveat is that they
 are regexes, and on a real model they were wrong in both directions. They **blocked good replies**: a
 refusal that repeated "50% off" and an offer to "check if something is in stock" (the "I'm still deciding"
-misfire), 2 of 41 drafts (4.9%). Reading the model's drafts showed both were harmless, and the policies
-now count a match only when it is not a refusal, an offer or a conditional (0/41 afterwards, 0/13 on 15
+misfire), 2 of 40 clean drafts (5.0%). Reading the model's drafts showed both were harmless, and the policies
+now count a match only when it is not a refusal, an offer or a conditional (0/40 afterwards, 0/13 on 15
 held-out prompts). They also **missed** two replies that asserted promotions no tool supports, because
 the discount policy only recognised a percentage or a code. Closing that gap taught the harder lesson: a
 first fix written from those two drafts blocked 6 of 11 on fresh prompts, five of them honest "I don't have
 information" answers (50% false positives), because it only excused the agent's inability to *act*. The
 policy now separates the agent speaking about what it knows from the store speaking about what it has.
-Over all 89 real drafts on file: 0 of 84 clean drafts blocked, 0 of 4 promotion claims missed, and one
-unrelated unsupported claim (how items are sold) still missed. Every round of fresh data found another
+Over all 89 real drafts on file: 0 of 83 clean drafts blocked, 0 of 4 promotion claims missed, and two
+unsupported claims of kinds the guardrails don't check (a store fact about how items are sold, and a promised
+capability) still get through. Every round of fresh data found another
 shape, which is why the check that a tool ran, not the wording, stays the main defence.
 
 ## Evaluation methodology
@@ -141,7 +142,7 @@ provider, with tokens and latency recorded per case).
 
 Measured directly, and recorded in `docs/results/` (see its `2026-10-13-summary.md`):
 
-- **529** automated tests, all passing, offline (no key, no Chroma, no network).
+- **530** automated tests, all passing, offline (no key, no Chroma, no network).
 - **Mock evaluation: 21/21.** A mock run replays scripted answers, so this is a regression check on the
   harness and the surrounding code. It is not a measurement of a model.
 - **Real evaluation, `gemini-3.5-flash-lite`, 2026-10-13, two independent runs of the 21 cases.**
@@ -157,13 +158,13 @@ Measured directly, and recorded in `docs/results/` (see its `2026-10-13-summary.
   one model on one day.
 - **Prompt injection, 10 new attempts on the real model: 10/10 held**, and the API key was in none of the
   replies.
-- **Guardrails:** false positives 2/41 (4.9%) → 0 of 84 clean drafts across five samples; the promotion
-  gap closed (0 of 4 promotion claims missed); one unrelated violation of five still missed (above).
+- **Guardrails:** false positives 2/40 (5.0%) → 0 of 83 clean drafts across five samples; the promotion
+  gap closed (0 of 4 promotion claims missed); two violations of six, of kinds the guardrails don't check, still get through (above).
 - **Free tier:** 15 generate requests a minute for this model, read from a real 429; the adapter does not
   hold a reply for a longer wait.
 
 What this does not show: 21 cases and 10 attacks are a smoke test, not coverage of real customers; one model
-was run; a live model varies run to run; the labels on the guardrail drafts were made by one AI reviewer (Claude Code), with a reason recorded for each, and are not independent or human-verified.
+was run; a live model varies run to run; the guardrail drafts are AI-labelled by one reviewer (Claude Code); a sample of 20 checked by Sameer: agreed with 19, relabelled 1.
 
 ## Known limitations
 
@@ -180,7 +181,7 @@ Stated plainly, not glossed over:
 - **Signal detection is keyword/regex-based**, English-only, and will miss indirect phrasing.
 - **Guardrails are pattern-based**, not a fact-checker — they confirm the right category of tool ran
   before a claim of that type is allowed through, not that every value in the reply is correct, and
-  they can over-block.
+  they can over-block, and they check refund promises but not other promised capabilities.
 - **The evaluation dataset is a 21-case smoke test**, not statistically powered coverage of real
   customer phrasing.
 - **Model providers.** Gemini (free tier, `gemini-3.5-flash-lite`) is the default and has been run;
@@ -193,8 +194,8 @@ Stated plainly, not glossed over:
 Gated by real need, not built speculatively:
 
 - Claim verification against the knowledge base: the code checks discount, stock, order-status and promotion
-  claims, while other product-fact claims (the one violation still missed was "we currently sell all our items
-  individually") rely on retrieval grounding. Planned for v1.1.
+  claims, while other product-fact claims (two violations still get through: "we currently sell all our items
+  individually", and an offer to start a claim from a photo the chat cannot receive) rely on retrieval grounding. Planned for v1.1.
 - Run the Anthropic adapter once credits are available.
 - Replace the mock business tools with a real store API (Shopify or similar), with authentication,
   once there is an actual store to connect to.

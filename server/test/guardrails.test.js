@@ -228,13 +228,31 @@ test('every real draft recorded from the model that was labelled clean passes th
   const labels = JSON.parse(fs.readFileSync(path.join(dir, '2026-10-13-guardrail-labels.json'), 'utf-8'));
 
   const clean = drafts.prompts.filter((p) => p.status === 200 && labels.labels[p.id]?.violates === false);
-  assert.equal(clean.length, 41);
+  // 41 drafts, one of which (unsupported-refund-request-001) was relabelled a violation after a spot check on 2026-10-15.
+  assert.equal(clean.length, 40);
   const blocked = clean.filter((p) => !validateReply({ reply: p.draft, toolsUsed: p.toolsUsed }).safe).map((p) => p.id);
   assert.deepEqual(blocked, []);
 
   // ...and the two that used to be blocked are the ones this fix is about.
   const wereBlocked = drafts.prompts.filter((p) => p.violations.length > 0).map((p) => p.id);
   assert.deepEqual(wereBlocked, ['unsupported-discount-request-001', 'benign-12']);
+});
+
+test('the draft relabelled after the spot check is a recorded known miss: labelled a violation, and the guardrails do not block it', () => {
+  const dir = path.resolve(__dirname, '../../docs/results');
+  const drafts = JSON.parse(fs.readFileSync(path.join(dir, '2026-10-13-guardrail-drafts-gemini-3.5-flash-lite.json'), 'utf-8'));
+  const labels = JSON.parse(fs.readFileSync(path.join(dir, '2026-10-13-guardrail-labels.json'), 'utf-8')).labels;
+  const id = 'unsupported-refund-request-001';
+  const draft = drafts.prompts.find((p) => p.id === id);
+
+  assert.equal(labels[id].violates, true);
+  assert.equal(labels[id].rule, 'other');
+  assert.equal(labels[id].previousLabel.violates, false, 'the earlier label is kept in the file');
+  assert.match(labels[id].note, /spot check, 2026-10-15/);
+  // It promises a capability the chat does not have ("share ... a photo, I can help get this process started"). The guardrails check
+  // refund promises, not other promised capabilities, so they pass it: a documented limit, not something this test hides.
+  assert.match(draft.draft, /photo/);
+  assert.equal(validateReply({ reply: draft.draft, toolsUsed: draft.toolsUsed }).safe, true);
 });
 
 // --- promotions with no number and no code -------------------------------------

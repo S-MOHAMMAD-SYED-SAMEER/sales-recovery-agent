@@ -24,32 +24,32 @@ The point of steps 2 and 4: a fix designed from two examples looked perfect on t
 failed on the first fresh data (50% false positives). It was caught only because fresh prompts were written
 first and run on the real model.
 
-## Totals with the final policy, over every real draft on file (labelled by one AI reviewer, Claude Code)
+## Totals with the final policy, over every real draft on file (AI-labelled by one reviewer (Claude Code); a sample of 20 checked by Sameer: agreed with 19, relabelled 1)
 
 | Set | Source | Clean drafts blocked (false positives) | Violating drafts missed |
 |---|---|---|---|
-| 1 | Dataset + benign prompts, 41 | 0 / 41 | none violating |
+| 1 | Dataset + benign prompts, 41 | 0 / 40 | 1 / 1 (relabelled after the spot check: an offer to start a claim from a photo) |
 | 2 | Held-out, 15 | 0 / 13 | 0 / 2 |
 | 3 | Injection run, 10 | 0 / 10 | none violating |
 | 4 | Promotion set A, 11 answered | 0 / 10 | 0 / 1 |
 | 5 | Promotion set B, 12 | 0 / 10 | 1 / 2 (the one that is not about promotions) |
-| **All** | **89 answered drafts** | **0 / 84 (0%)** | **0 / 4 promotion claims missed; 1 / 5 violations of any kind** |
+| **All** | **89 answered drafts** | **0 / 83 (0%)** | **0 / 4 promotion claims missed; 2 / 6 violations of any kind** |
 
 ## What can and cannot be claimed
 
-- **False positives: 0 of 84 clean drafts across five samples**, including 0 of 10 on set B, the one set that
-  was out of sample for the revised policy when it was run. Earlier numbers (a 4.9% rate in the first
+- **False positives: 0 of 83 clean drafts across five samples**, including 0 of 10 on set B, the one set that
+  was out of sample for the revised policy when it was run. Earlier numbers (a 5.0% rate, 2 of 40 clean, in the first
   sample, and 50% for version 1 of this fix on set A) are kept in the analysis files ("At capture").
 - **The gap: 0 of 4 in-scope violations missed**, but only the first set (2 drafts) was genuinely held out for
   the policy as shipped. Set A shaped version 2, and the "promotional" miss on set B shaped the final noun list,
   so both are in-sample for the final text. The honest out-of-sample figures for version 2 were: 0 false
   positives of 10, one in-scope violation missed of one.
 - **It is still a pattern match.** Promotion and availability claims can be phrased in many ways; the next
-  fresh sample will probably find another. The one violation outside the policy's scope (an invented statement
-  about how items are sold) shows the general problem: a guardrail that reads text catches the shapes it was
+  fresh sample will probably find another. The violations outside the policy's scope (an invented statement
+  about how items are sold, and an offer to start a claim from a photo the chat cannot receive) show the general problem: a guardrail that reads text catches the shapes it was
   built for. The code-level protections that do not depend on wording (a tool must have run for a claim of that
   category) remain the main defence; this policy is the backstop for claims no tool exists to check.
-- Labels are one AI reviewer (Claude Code), with a reason recorded for each; not independent and not human-verified.
+- Labels: AI-labelled by one reviewer (Claude Code); a sample of 20 checked by Sameer: agreed with 19, relabelled 1.
 
 ## Calls
 
