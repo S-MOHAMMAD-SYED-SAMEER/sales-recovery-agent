@@ -19,6 +19,7 @@ is edited by hand.
 | `YYYY-MM-DD-promotion-run*.json`, `*-promotion-labels*.json`, `*-promotion-fix-analysis-set*.json` | `guardrail-fp.js` (capture, then analyze) | Fresh promotion and discount prompts on the real model, the hand labels, and the false-positive / false-negative rates of the final policy on every draft on file |
 | `YYYY-MM-DD-promotion-gap.md` | by hand | How the promotion-claim gap was closed, step by step, including the version that failed on fresh data |
 | `YYYY-MM-DD-rehearsal-run-<model>.json` | `guardrail-fp.js --capture --name=rehearsal-run` | A rehearsal of the two recording-script prompts that fell back, on a different model (`gemini-3.5-flash`, because `gemini-3.5-flash-lite` was returning 503s). Two drafts kept, two lost to a 429. Not part of any score |
+| `YYYY-MM-DD-video-rehearsal-<model>*.json` | `GUARDRAIL_LOG_DRAFTS=true node scripts/video-rehearsal.js --runs=5 --record` | The five typed prompts of the demo video, played in order in 5 fresh conversations: for each reply the model's draft, every block (policy, rule, matched phrase, clause), the final reply, tools and signals. The pass condition for recording is no block on "50% off" and "still deciding" |
 | `YYYY-MM-DD-summary.md` | by hand | What the runs of that day add up to |
 
 Mock-mode evaluation output is **not** kept here: it replays scripted answers and says nothing
