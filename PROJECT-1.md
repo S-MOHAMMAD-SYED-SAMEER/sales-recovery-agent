@@ -163,7 +163,7 @@ Measured directly, and recorded in `docs/results/` (see its `2026-10-13-summary.
   hold a reply for a longer wait.
 
 What this does not show: 21 cases and 10 attacks are a smoke test, not coverage of real customers; one model
-was run; a live model varies run to run; the labels on the guardrail drafts are one reviewer's.
+was run; a live model varies run to run; the labels on the guardrail drafts were made by one AI reviewer (Claude Code), with a reason recorded for each, and are not independent or human-verified.
 
 ## Known limitations
 

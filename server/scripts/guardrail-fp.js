@@ -13,7 +13,7 @@
 //   node scripts/guardrail-fp.js --analyze=<drafts.json> --labels=<labels.json>
 //                                                   no model: runs the CURRENT guardrails
 //                                                   over the saved drafts and compares
-//                                                   with the hand labels. Free, repeatable;
+//                                                   with the AI reviewer's labels. Free, repeatable;
 //                                                   this is how a policy fix is measured
 //                                                   on the same drafts, before and after.
 //

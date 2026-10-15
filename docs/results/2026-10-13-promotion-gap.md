@@ -24,7 +24,7 @@ The point of steps 2 and 4: a fix designed from two examples looked perfect on t
 failed on the first fresh data (50% false positives). It was caught only because fresh prompts were written
 first and run on the real model.
 
-## Totals with the final policy, over every real draft on file (labelled by hand)
+## Totals with the final policy, over every real draft on file (labelled by one AI reviewer, Claude Code)
 
 | Set | Source | Clean drafts blocked (false positives) | Violating drafts missed |
 |---|---|---|---|
@@ -49,7 +49,7 @@ first and run on the real model.
   about how items are sold) shows the general problem: a guardrail that reads text catches the shapes it was
   built for. The code-level protections that do not depend on wording (a tool must have run for a claim of that
   category) remain the main defence; this policy is the backstop for claims no tool exists to check.
-- Labels are one reviewer's, with the reason written next to each.
+- Labels are one AI reviewer (Claude Code), with a reason recorded for each; not independent and not human-verified.
 
 ## Calls
 

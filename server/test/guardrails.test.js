@@ -305,7 +305,7 @@ test('a refusal by the agent cannot excuse a store-side claim in the same breath
 
 // --- the promotion policy against every real draft recorded -------------------
 // A policy that reads text is only as good as the text it was tried on, so this reads
-// every draft kept under docs/results/ together with the hand label for it: a draft
+// every draft kept under docs/results/ together with its label (made by one AI reviewer, Claude Code): a draft
 // labelled as breaking a rule must be blocked, and one labelled clean must pass.
 
 const RECORDED = [
@@ -316,7 +316,7 @@ const RECORDED = [
   ['2026-10-13-promotion-run-2-gemini-3.5-flash-lite.json', '2026-10-13-promotion-labels-2.json'],
 ];
 
-test('every recorded real draft is blocked if and only if it was hand-labelled as breaking a rule, as far as the promotion and discount policy goes', () => {
+test('every recorded real draft is blocked if and only if it was labelled as breaking a rule, as far as the promotion and discount policy goes', () => {
   const dir = path.resolve(__dirname, '../../docs/results');
   let clean = 0;
   let violating = 0;

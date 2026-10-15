@@ -53,7 +53,7 @@ function analyze(drafts, labels) {
   }
 }
 
-test('--analyze reports false positives and false negatives of the current guardrails against hand labels', () => {
+test('--analyze reports false positives and false negatives of the current guardrails against labels made by the AI reviewer', () => {
   const drafts = {
     meta: { model: 'fixture' },
     prompts: [

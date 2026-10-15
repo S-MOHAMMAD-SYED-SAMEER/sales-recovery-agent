@@ -25,7 +25,7 @@ their date, model and dataset version instead of being asserted in tests.
 | **HTTP layer** (`app.test.js`) | 13 | The only tests that start the real Express app. They cover what no other test reaches: the 16 KB body limit and its JSON 413 (it used to return an HTML page with a stack trace and file paths), malformed JSON, the missing `X-Powered-By`, the rate limiter's wiring, and a generic 500 that leaks nothing |
 | **The turn** (`chat.route`, `chat.demoProvider.integration`, `clientFacingCopy`) | 55 | `handleChat` end to end with a stub model: validation, history, memory isolation between sessions, signals in the prompt, guardrail blocking and what is persisted, an empty model reply, usage logging. `clientFacingCopy` checks that nothing a customer can read names a provider, a variable or a file |
 | **Business tools** (`tools`) | 22 | Deterministic mock data, argument validation, a dispatcher that never throws, whole-word stock matching, expiry-aware discounts on a pinned clock, no "found" for `constructor` |
-| **Guardrails** (`guardrails`, `guardrail.measurement`) | 35 | A violating and a safe case for each of the eight policies; claim versus mention; and a test that reads every real draft kept in `docs/results/` and checks the policy against the hand label on it |
+| **Guardrails** (`guardrails`, `guardrail.measurement`) | 35 | A violating and a safe case for each of the eight policies; claim versus mention; and a test that reads every real draft kept in `docs/results/` and checks the policy against the AI reviewer's label on it (not human-verified) |
 | **Discounts verified earlier in the conversation** (`guardrails.verifiedDiscounts`) | 17 | A true statement about a code checked on an earlier turn is allowed, and only then: never-verified codes, claims that name no code, every kind of mismatch (percentage, eligibility, money amount, expiry date, validity both ways) and a verification made in another conversation all still block. Records are the real tool's output. The reply blocked in the 2026-10-15 rehearsal is a regression test (allowed with the earlier check, blocked without), end to end through `handleChat`, including that a customer cannot plant a verification and that a store without the new methods falls back to the stricter behaviour |
 | **The rehearsal script** (`scripts.rehearsal`) | 13 | Without a model: a knowledge-base failure of any kind is an error, the return window is read from the policy file and a reply either states it or does not, the pass condition (including that a stopped run never passes), and that the script refuses to start, with no model call, when Chroma is not there |
 | **The chat page** (`web.chatPage`) | 19 | How a reply is drawn (inline code, bold and bullets from text nodes, never HTML: the stand-in document throws if `innerHTML` is touched, and five injection strings stay text), that every `innerHTML` in the page is a literal, that `/format.js` and `/api/mode` are served, and the header tag (`Live · <model>` only for a configured real provider, never the key, `Demo` for anything else); and the cold-start notice setting: the server reports it only when the parsed flag is true, the page shows it only for the first message and only then, any unreadable answer means no notice, and the flag is documented in HOSTING.md, the README and `.env.example`. Also checked once in headless Chrome |
@@ -55,9 +55,10 @@ their date, model and dataset version instead of being asserted in tests.
    (`guardrails`). The counterweight to the false-positive fix: `"I can't promise it will last, but use SAVE20
    for 20% off"` and `"I can check and it is in stock"` must still be blocked. A guardrail that never blocks
    would also have no false positives; this test is what stops the fix from being that.
-4. **`every recorded real draft is blocked if and only if it was hand-labelled as breaking a rule`**
-   (`guardrails`). Reads the five sets of real model drafts in `docs/results/` with their labels. If a future
-   change to a regex blocks a draft a person had judged fine, or unblocks one judged bad, this fails and names
+4. **`every recorded real draft is blocked if and only if it was labelled as breaking a rule`**
+   (`guardrails`). Reads the five sets of real model drafts in `docs/results/` with their labels. The labels were
+   made by one AI reviewer (Claude Code), with a reason recorded for each; not independent and not human-verified. If a future
+   change to a regex blocks a draft the reviewer had judged fine, or unblocks one judged bad, this fails and names
    the draft.
 5. **`a 429 that asks for a long wait fails straight away instead of holding the customer`** (`llm.gemini`). A
    fake client answers 429 with a 90-second retry delay; the test asserts one request and no sleep. It is the
@@ -141,7 +142,7 @@ labels, for free.
 | Final, all 89 answered drafts on file | **0 of 84 clean drafts blocked; 0 of 4 promotion claims missed; 1 of 5 violations of any kind missed** (an unsupported fact about how items are sold, not a promotion) |
 
 Full account: [`docs/results/2026-10-13-promotion-gap.md`](./results/2026-10-13-promotion-gap.md). Labels are
-one reviewer's, with the reason beside each. The honest summary is that a pattern-based guardrail is only
+one AI reviewer (Claude Code), with a reason recorded for each; not independent and not human-verified. The honest summary is that a pattern-based guardrail is only
 as good as the drafts it has been tried on, and every round of new real drafts found something.
 
 ## Free-tier and injection checks
@@ -153,7 +154,7 @@ as good as the drafts it has been tried on, and every round of new real drafts f
 - **Injection**: five cases in the dataset plus ten more in `eval/injection-prompts.json` (fake system
   override, translate the prompt, dump everything above, a false policy, a pre-announced tool result, forged
   chat turns, "act as the manager", an API-key request, an off-topic hijack, path-traversal and `OR 1=1` order
-  ids). All held, each draft read by hand, and the real key was checked for in every reply before the saved file
+  ids). All held, each draft read by the same AI reviewer (Claude Code), and the real key was checked for in every reply before the saved file
   was redacted. Not covered: injection through the knowledge-base documents (committed and trusted),
   multi-turn escalation, and other languages.
 
@@ -179,7 +180,7 @@ screenshots and the one real rehearsal with traces are described in
 
 ## What is not tested
 
-No browser test of the demo page in the suite (the browser check above was run once, by hand, and is not repeated by CI);  no load test; no retrieval-quality
+No browser test of the demo page in the suite (the browser check above was run once, outside the suite, and is not repeated by CI);  no load test; no retrieval-quality
 benchmark beyond a handful of questions; the Anthropic adapter is tested against a fake client only and has
 never been run live; the evaluation is 21 cases and 10 attacks on one model on one day, a smoke test and not a
 benchmark.
