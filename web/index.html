@@ -182,6 +182,29 @@
       letter-spacing: -0.01em;
       margin: 0;
     }
+    .tag.live {
+      background: var(--success-tint, #e6f4ea);
+      color: var(--success, #1e6b3a);
+      border-color: var(--success, #1e6b3a);
+      text-transform: none;
+      letter-spacing: 0.02em;
+    }
+    .tag.live::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .bubble code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.07);
+    }
     .tag {
       font-size: var(--text-meta);
       font-weight: 600;
@@ -513,7 +536,7 @@
         <div class="brand-text">
           <div class="brand-line">
             <h1>AI Customer Support &amp; Sales Recovery</h1>
-            <span class="tag">Demo</span>
+            <span class="tag" id="mode-tag">Demo</span>
           </div>
           <p>Helps online stores answer customer questions instantly, recover hesitant buyers, and
             reduce repetitive support work.</p>
@@ -564,6 +587,7 @@
     </form>
   </div>
 
+  <script src="format.js"></script>
   <script>
     const SESSION_KEY = 'sra_session_id';
 
@@ -639,7 +663,8 @@
 
       const bubble = document.createElement('div');
       bubble.className = 'bubble';
-      bubble.textContent = text;
+      // Inline code and bold are drawn; everything is built from text nodes, never parsed as HTML.
+      SraFormat.renderReply(document, bubble, text);
       turn.appendChild(bubble);
 
       const badgeSources = [
@@ -797,6 +822,24 @@
       showEmptyState('New conversation started — send a message to begin.');
       input.focus();
     });
+
+    // The header says "Demo" until the server reports that a real model is configured. Only the
+    // provider's model name is ever shown here, never a key. If the question cannot be answered the
+    // tag simply stays as it is.
+    (async function showMode() {
+      try {
+        const res = await fetch('/api/mode');
+        if (!res.ok) return;
+        const mode = SraFormat.modeLabel(await res.json());
+        const tag = document.getElementById('mode-tag');
+        if (mode.live && tag) {
+          tag.textContent = mode.text;
+          tag.classList.add('live');
+        }
+      } catch (err) {
+        /* keep the default tag */
+      }
+    })();
 
     input.focus();
   </script>
