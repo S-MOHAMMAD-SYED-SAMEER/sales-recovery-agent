@@ -22,6 +22,7 @@ is edited by hand.
 | `YYYY-MM-DD-video-rehearsal-<model>*.json` | `GUARDRAIL_LOG_DRAFTS=true node scripts/video-rehearsal.js --runs=5 --record` | The five typed prompts of the demo video, played in order in 5 fresh conversations: for each reply the model's draft, every block (policy, rule, matched phrase, clause), the final reply, tools and signals. The pass condition for recording is no block on "50% off" and "still deciding" |
 | `YYYY-MM-DD-video-rehearsal-labels.json` | by hand | A label for each of the 25 drafts in a rehearsal file (all clean) |
 | `YYYY-MM-DD-cross-turn-fix-analysis-set1..6-<model>.json` | `guardrail-fp.js --analyze --record` | The current guardrails replayed over every draft on file after the same-conversation discount change: sets 1 to 5 are the earlier samples, set 6 the rehearsal (replayed with the earlier turns' verifications) |
+| `YYYY-MM-DD-hesitation-fix-analysis-rehearsal<N>-<model>.json`, `YYYY-MM-DD-video-rehearsal-<N>-labels.json` | `guardrail-fp.js --analyze --record`, and by hand | The current guardrails replayed over the second and third rehearsal's 25 drafts each, and the labels (the second has one unsupported "hassle-free" claim that no guardrail covers) |
 | `YYYY-MM-DD-summary.md` | by hand | What the runs of that day add up to |
 
 Mock-mode evaluation output is **not** kept here: it replays scripted answers and says nothing
