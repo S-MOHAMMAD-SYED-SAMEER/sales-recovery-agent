@@ -5,7 +5,6 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { handleChat } from '../src/routes/chat.js';
 import { createDb } from '../src/memory/db.js';
 import { createConversationStore } from '../src/memory/conversationStore.js';
 
@@ -87,11 +86,13 @@ test('the "New conversation" button and a page load use the same way to get an i
   assert.deepEqual(uses, ['SraSession.startSession(window.localStorage, newSessionId)', 'newSessionId()']);
 });
 
-test('what a reload changes on the server: the new conversation has no history and no verified codes', async () => {
+test('what a reload changes on the server: the new conversation has no history and no verified codes', () => {
   // The same store, two "page loads" (two session ids): the second knows nothing of the first.
   const store = createConversationStore(createDb(':memory:'));
   const first = SraSession.startSession(fakeStorage(), randomUUID);
-  await handleChat({ sessionId: first, message: 'Is WELCOME10 valid?' }, { conversationStore: store });
+  store.saveMessage(first, 'user', 'Is WELCOME10 valid?');
+  store.saveMessage(first, 'assistant', 'Yes.');
+  store.saveVerifiedDiscount(first, { code: 'WELCOME10', valid: true }, 1, 'Is WELCOME10 valid?');
   assert.equal(store.getVerifiedDiscounts(first).length, 1);
 
   const second = SraSession.startSession(fakeStorage({ sra_session_id: first }), randomUUID);
