@@ -113,6 +113,14 @@ export function summarizeToolOutcome(name, outcome) {
   }
 }
 
+// "WELCOME10: verified by checkDiscount on turn 2 of this conversation".
+export function describeVerification({ code, basis, turn }) {
+  const who = code ? `${code}: ` : '';
+  if (basis === 'this-turn') return `${who}verified by checkDiscount on this turn`;
+  const where = Number.isInteger(turn) ? `on turn ${turn} of this conversation` : 'earlier in this conversation';
+  return `${who}verified by checkDiscount ${where}`;
+}
+
 // ---- the trace itself -------------------------------------------------------------------------------
 
 export function createTrace({ clock = () => performance.now(), model = null } = {}) {
@@ -203,11 +211,19 @@ export function createTrace({ clock = () => performance.now(), model = null } = 
 
     // One policy and what it decided. The whole reply is replaced when any policy blocks (there is no
     // partial rewrite in v1.0), so the outcome is "pass" or "block".
-    guardrail({ policy, outcome, reason, rule }) {
+    guardrail({ policy, outcome, reason, rule, verified }) {
+      // Why a claim was allowed, when the policy relied on a checkDiscount result: which code, and whether the
+      // tool ran on this turn or on an earlier one (and which). Passed on from the policy's own decision.
+      const basis = (Array.isArray(verified) ? verified : []).slice(0, 8).map((v) => ({
+        code: v.code ? cleanText(v.code, 40) : null,
+        basis: v.basis === 'earlier-turn' ? 'earlier-turn' : 'this-turn',
+        turn: Number.isInteger(v.turn) ? v.turn : null,
+      }));
       add({
         type: 'guardrail',
         policy: cleanText(policy, 60),
         outcome: outcome === 'block' ? 'block' : 'pass',
+        ...(basis.length > 0 ? { verified: basis, note: basis.map(describeVerification).join('; ') } : {}),
         ...(outcome === 'block' ? { reason: cleanText(reason, 160), ...(rule ? { rule: cleanText(rule, 60) } : {}) } : {}),
       });
     },

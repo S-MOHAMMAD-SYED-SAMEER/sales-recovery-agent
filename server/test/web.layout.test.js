@@ -239,3 +239,11 @@ test('the stylesheet and the scripts are served with the page', async (t) => {
     assert.match(await response.text(), new RegExp(marker), file);
   }
 });
+
+test('the guardrail chip comes from the trace, and a chip that is only partly in view is scrolled to when it takes focus', () => {
+  assert.match(app, /chips\.guardrail/);
+  assert.match(app, /'badge guardrail blocked' : 'badge guardrail'/);
+  assert.match(css, /\.badge\.guardrail\.blocked \{[^}]*color: var\(--error-text\)/);
+  assert.match(app, /suggestions\.addEventListener\('focusin'[\s\S]*scrollIntoView\(\{ block: 'nearest', inline: 'nearest' \}\)/);
+  assert.match(css, /scroll-padding: 0 16px/);
+});

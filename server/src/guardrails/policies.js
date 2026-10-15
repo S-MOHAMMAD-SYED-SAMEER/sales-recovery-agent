@@ -187,8 +187,13 @@ export const POLICIES = [
     name: 'no_unverified_discount_claim',
     description:
       'Do not state or imply a discount, code, percent-off or promotion (including that there is none) unless checkDiscount ran this turn, or the claim is about a code checkDiscount verified earlier in this conversation and every detail matches that result exactly.',
-    check({ reply, toolsUsed, verifiedDiscounts = [] }) {
-      if (usedTool(toolsUsed, 'checkDiscount')) return null;
+    // `note` records WHY a claim was allowed, from this decision itself: the tool ran this turn, or the
+    // claim was matched to a code verified earlier. It is what the trace shows; it never changes the outcome.
+    check({ reply, toolsUsed, verifiedDiscounts = [], note = () => {} }) {
+      if (usedTool(toolsUsed, 'checkDiscount')) {
+        note({ basis: 'this-turn' });
+        return null;
+      }
 
       // Discount claims first, then promotion claims, as before; the first claim that is not
       // covered by an earlier verification in this conversation is the violation.
@@ -198,9 +203,13 @@ export const POLICIES = [
         ...findClaims(reply, PROMOTION_CLAIM_RE, isPromotionMention).map((claim) => ({ claim, rule: 'promotion' })),
       ];
 
+      const reliedOn = new Set();
       for (const { claim, rule } of candidates) {
         const earlier = verifiedDiscounts.length > 0 ? checkAgainstVerified({ ...claim, replyCodes }, verifiedDiscounts) : null;
-        if (earlier?.ok) continue;
+        if (earlier?.ok) {
+          for (const code of earlier.codes) reliedOn.add(code);
+          continue;
+        }
 
         const found = { matched: claim.matched, clause: claim.clause };
         if (earlier) {
@@ -218,6 +227,7 @@ export const POLICIES = [
           found
         );
       }
+      if (reliedOn.size > 0) note({ basis: 'earlier-turn', codes: [...reliedOn] });
       return null;
     },
   },

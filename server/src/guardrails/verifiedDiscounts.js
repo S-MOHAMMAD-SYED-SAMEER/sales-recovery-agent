@@ -76,7 +76,7 @@ function datesIn(text) {
 // refusal such as "I don't have a 50% off code") already taken out, so what is judged is what the
 // reply claims. `replyCodes` are the codes named anywhere in the reply, used when the claim itself
 // names none ("It gives 10% off ...").
-// Returns { ok: true } or { ok: false, why }.
+// Returns { ok: true, codes } (the verified codes the claim was matched against) or { ok: false, why }.
 export function checkAgainstVerified({ sentence, replyCodes }, records) {
   const tail = sentence;
   const byCode = indexVerified(records);
@@ -119,5 +119,5 @@ export function checkAgainstVerified({ sentence, replyCodes }, records) {
     }
   }
 
-  return { ok: true };
+  return { ok: true, codes: referents };
 }

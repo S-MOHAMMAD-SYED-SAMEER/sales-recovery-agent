@@ -102,7 +102,7 @@ test('chips: a turn that used no tool and fired no signal has none, and a repeat
   b({ ok: true, result: { found: true, inStock: false, quantity: 0 } });
   assert.deepEqual(SraTrace.chipsFor({ trace: t.snapshot() }).tools, ['Checked product availability']);
 
-  assert.deepEqual(SraTrace.chipsFor({ trace: createTrace().snapshot() }), { tools: [], sources: [], signals: [] });
+  assert.deepEqual(SraTrace.chipsFor({ trace: createTrace().snapshot() }), { tools: [], sources: [], signals: [], guardrail: null });
 });
 
 test('chips: a knowledge base that was down names no source', () => {
@@ -114,8 +114,8 @@ test('chips: a knowledge base that was down names no source', () => {
 test('chips: a reply without a trace (an older server) falls back to toolsUsed and signals, and invents no source', () => {
   const chips = SraTrace.chipsFor({ reply: 'x', toolsUsed: ['getOrderStatus', 'mysteryTool'], signals: [{ type: 'price_concern' }] });
 
-  assert.deepEqual(chips, { tools: ['Checked order status', 'mysteryTool'], sources: [], signals: ['Noticed: price concern'] });
-  assert.deepEqual(SraTrace.chipsFor(null), { tools: [], sources: [], signals: [] });
+  assert.deepEqual(chips, { tools: ['Checked order status', 'mysteryTool'], sources: [], signals: ['Noticed: price concern'], guardrail: null });
+  assert.deepEqual(SraTrace.chipsFor(null), { tools: [], sources: [], signals: [], guardrail: null });
 });
 
 test('the panel lists the steps in the order they ran, with the labels an operator reads', () => {
@@ -280,4 +280,33 @@ test('icons are decorative: hidden from assistive technology', () => {
 
   assert.ok(svgs.length >= 6);
   assert.ok(svgs.every((s) => s.attrs['aria-hidden'] === 'true' && s.attrs.focusable === 'false'));
+});
+
+test('chip: "Guardrail checked" when the guardrails ran and passed the reply, from the trace', () => {
+  assert.deepEqual(SraTrace.chipsFor({ trace: hesitationTrace() }).guardrail, { label: 'Guardrail checked', blocked: false });
+});
+
+test('chip: "Guardrail: blocked" when a policy blocked the reply; nothing at all when no guardrail step was recorded', () => {
+  const t = createTrace();
+  t.guardrail({ policy: 'no_unverified_discount_claim', outcome: 'pass' });
+  t.guardrail({ policy: 'no_unsupported_refund_promise', outcome: 'block', reason: 'x', rule: 'refund-promise' });
+  assert.deepEqual(SraTrace.chipsFor({ trace: t.snapshot() }).guardrail, { label: 'Guardrail: blocked', blocked: true });
+
+  const noGuardrail = createTrace();
+  noGuardrail.signal({ type: 'price_concern', confidence: 0.8, evidence: 'too expensive' });
+  assert.equal(SraTrace.chipsFor({ trace: noGuardrail.snapshot() }).guardrail, null);
+  // There is no "rewritten" state: a policy that objects replaces the whole reply.
+  assert.ok(!JSON.stringify(SraTrace.chipsFor({ trace: t.snapshot() })).includes('rewritten'));
+});
+
+test('the panel shows what a policy relied on, as the server recorded it, next to that policy', () => {
+  const t = createTrace();
+  t.guardrail({ policy: 'no_unverified_discount_claim', outcome: 'pass', verified: [{ code: 'WELCOME10', basis: 'earlier-turn', turn: 2 }] });
+  t.guardrail({ policy: 'no_unverified_stock_claim', outcome: 'pass' });
+
+  const [row] = SraTrace.buildView(t.snapshot()).rows;
+  assert.deepEqual(
+    row.items.map((i) => i.text),
+    ['no unverified discount claim — WELCOME10: verified by checkDiscount on turn 2 of this conversation', 'no unverified stock claim']
+  );
 });

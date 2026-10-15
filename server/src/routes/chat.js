@@ -101,8 +101,10 @@ export async function handleChat({ sessionId, message }, deps = {}) {
   // true statement about one is not mistaken for an unverified claim. Same degradation rule as
   // history: if they cannot be read, the guardrails simply see none and are stricter.
   let verifiedDiscounts = [];
+  let verifiedTurns = {};
   try {
     verifiedDiscounts = conversationStore.getVerifiedDiscounts?.(sessionId) ?? [];
+    verifiedTurns = conversationStore.getVerifiedTurns?.(sessionId) ?? {};
   } catch (err) {
     console.error('[chat] Failed to load verified discounts:', err.message);
   }
@@ -145,7 +147,15 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     };
   }
 
-  const guardrailResult = validateReply({ reply: text, toolsUsed, verifiedDiscounts });
+  // The codes checkDiscount checked on THIS turn, from the executor's own record.
+  const verifiedThisTurn = [
+    ...new Set(
+      toolResults
+        .filter((r) => r.name === 'checkDiscount' && r.outcome?.ok && typeof r.outcome.result?.code === 'string')
+        .map((r) => r.outcome.result.code)
+    ),
+  ];
+  const guardrailResult = validateReply({ reply: text, toolsUsed, verifiedDiscounts, verifiedTurns, verifiedThisTurn });
   if (!guardrailResult.safe) {
     // Always the policy and what matched: enough to tell a right block from a wrong one.
     for (const v of guardrailResult.violations) {
@@ -163,9 +173,9 @@ export async function handleChat({ sessionId, message }, deps = {}) {
   const finalReply = guardrailResult.finalReply;
   // One step per policy that ran. A blocked policy carries its reason and rule (what it matched is
   // in the server log, not here: it is part of the draft).
-  for (const { policy, outcome } of guardrailResult.checks) {
+  for (const { policy, outcome, verified } of guardrailResult.checks) {
     const violation = guardrailResult.violations.find((v) => v.name === policy);
-    trace.guardrail({ policy, outcome, reason: violation?.reason, rule: violation?.rule });
+    trace.guardrail({ policy, outcome, reason: violation?.reason, rule: violation?.rule, verified });
   }
 
   // Only the plain user/assistant text is persisted — the tool-call/tool-result
@@ -185,8 +195,10 @@ export async function handleChat({ sessionId, message }, deps = {}) {
   // reply, so it is kept against this conversation for the turns that follow. Only a successful
   // tool result is kept, and it comes from the executor, not from anything the model wrote.
   try {
+    // The turn number is the count of customer messages once this one is saved.
+    const turn = conversationStore.countUserMessages?.(sessionId);
     for (const { name, outcome } of toolResults) {
-      if (name === 'checkDiscount' && outcome?.ok) conversationStore.saveVerifiedDiscount?.(sessionId, outcome.result);
+      if (name === 'checkDiscount' && outcome?.ok) conversationStore.saveVerifiedDiscount?.(sessionId, outcome.result, turn);
     }
   } catch (err) {
     console.error('[chat] Failed to persist verified discounts:', err.message);
