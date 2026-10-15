@@ -32,7 +32,7 @@ import { handleChat } from '../src/routes/chat.js';
 import { createDb } from '../src/memory/db.js';
 import { createConversationStore } from '../src/memory/conversationStore.js';
 import { ensureKnowledgeBase } from './lib/stack.js';
-import { citesReturnWindow, judge, knowledgeBaseProblem, knowledgeBaseUse, returnWindowDays, summarisePrompts, traceProblems } from './lib/rehearsal.js';
+import { citesReturnWindow, judge, knowledgeBaseProblem, knowledgeBaseUse, returnWindowDays, summarisePrompts, traceProblems, withinBudget } from './lib/rehearsal.js';
 import { POLICIES } from '../src/guardrails/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -42,6 +42,13 @@ const record = args.includes('--record');
 const nameArg = args.find((a) => a.startsWith('--name='));
 const recordName = nameArg ? nameArg.slice('--name='.length).replace(/[^A-Za-z0-9-]/g, '') : 'video-rehearsal';
 const delayMs = Number(process.env.REHEARSAL_DELAY_MS) || 10_000;
+// --max-calls=N: never start a prompt unless two more model requests still fit in N (see withinBudget).
+const maxCallsArg = args.find((a) => a.startsWith('--max-calls='));
+const maxCalls = maxCallsArg ? Number(maxCallsArg.split('=')[1]) : null;
+if (maxCalls !== null && (!Number.isInteger(maxCalls) || maxCalls < 1)) {
+  console.error('--max-calls must be a positive integer.');
+  process.exit(1);
+}
 
 // The script in the progress notes: 8-25 s, 25-40 s (two prompts), 40-60 s, 60-75 s.
 export const STEPS = [
@@ -105,15 +112,23 @@ const rows = [];
 let consecutiveFailures = 0;
 let aborted = null;
 let sent = 0;
+let modelRequests = 0;
 
 outer: for (let take = 1; take <= runs; take += 1) {
   const store = createConversationStore(createDb(':memory:'));
   for (const step of STEPS) {
+    if (!withinBudget(modelRequests, maxCalls)) {
+      aborted = { kind: 'budget', reason: `Stopped before "${step.id}" in take ${take}: ${modelRequests} model requests made, and the budget is ${maxCalls}.`, afterTake: take, afterStep: step.id };
+      console.log(`STOPPED: ${aborted.reason}`);
+      break outer;
+    }
     if (sent > 0) await sleep(delayMs);
     sent += 1;
     captured = [];
     const result = await handleChat({ sessionId: `take-${take}`, message: step.message }, { conversationStore: store });
     const row = { take, step: step.id, message: step.message, status: result.status };
+    // A reply that never came back made at least one request that cannot be counted from its usage.
+    modelRequests += result.usage?.calls ?? (result.status === 200 ? 0 : 1);
 
     if (result.status === 200) {
       row.draft = result.guardrail.draft;
@@ -178,6 +193,7 @@ console.log(
     `${verdict.pass ? 'PASS' : 'NOT MET'} (${verdict.criticalBlocked} blocked of ${verdict.criticalAnswered} answered; ${verdict.citedReturnPolicy} of ${runs} "still deciding" replies cite the return window${aborted ? `; run stopped: ${aborted.kind}` : ''}).`
 );
 
+console.log(`Model requests made: ${modelRequests}${maxCalls !== null ? ` (budget ${maxCalls})` : ''}.`);
 console.log(`Trace check: ${traceConsistent} of ${answeredRows.length} answered replies have a trace consistent with what the turn did.`);
 
 if (record) {
@@ -193,6 +209,8 @@ if (record) {
       model: config.geminiModel,
       takes: runs,
       delayMs,
+      maxCalls,
+      modelRequests,
       guardrailLogDrafts: config.guardrailLogDrafts,
       knowledgeBase: { ready: true, url: knowledgeBase.url, returnWindowDays: windowDays, preflightSources },
     },
