@@ -7,6 +7,12 @@ import { config as defaultConfig, isConfigured as defaultIsConfigured } from '..
 // returned by accident; the test checks the whole JSON for it anyway. In every other case (the demo
 // provider, or a real provider with no key, which cannot answer anything) `live` is false and no model
 // is named, and the page keeps its "Demo" tag.
+// Page behaviour the server decides, not a secret: whether to show the "waking up" notice on a slow first reply.
+// Kept apart from describeMode (which says which model answers) and merged by the route.
+export function describeUi(config = defaultConfig) {
+  return { coldStartNotice: config.showColdStartNotice === true };
+}
+
 export function describeMode(config = defaultConfig, configured = defaultIsConfigured) {
   const provider = config.llmProvider;
   if (provider === 'gemini' && configured) return { provider, live: true, model: config.geminiModel };

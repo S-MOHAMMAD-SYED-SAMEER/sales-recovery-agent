@@ -56,6 +56,10 @@ export const config = {
   // model's whole draft is logged too only when this is "true" (trimmed, any case): it is the
   // customer's conversation, so it is off by default.
   guardrailLogDrafts: (process.env.GUARDRAIL_LOG_DRAFTS || '').trim().toLowerCase() === 'true',
+  // The chat page can tell the visitor that the assistant is "waking up" when the first reply of a page load is
+  // slow. That is true only of a hosted service that sleeps when idle (see docs/HOSTING.md), so it is off
+  // unless this is "true" (trimmed, any case): locally the notice would be false.
+  showColdStartNotice: (process.env.SHOW_COLD_START_NOTICE || '').trim().toLowerCase() === 'true',
   sqlitePath: process.env.SQLITE_PATH || DEFAULT_SQLITE_PATH,
   chromaHost: process.env.CHROMA_HOST || 'localhost',
   chromaPort: Number(process.env.CHROMA_PORT) || 8000,

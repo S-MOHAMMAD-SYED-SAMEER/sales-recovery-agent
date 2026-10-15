@@ -247,3 +247,33 @@ test('the guardrail chip comes from the trace, and a chip that is only partly in
   assert.match(app, /suggestions\.addEventListener\('focusin'[\s\S]*scrollIntoView\(\{ block: 'nearest', inline: 'nearest' \}\)/);
   assert.match(css, /scroll-padding: 0 16px/);
 });
+
+// A decorative glyph is a CSS escape. Written through another language's string it can turn into something else
+// (an octal escape made "\\2713" into "\u00b93"), and a colour-only test cannot see that, so the glyphs are read here.
+const unescapeCss = (text) => text.replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
+const contentOf = (selector) => {
+  const start = css.indexOf(`${selector} {`);
+  assert.ok(start >= 0, `no rule for ${selector}`);
+  const rule = css.slice(start, css.indexOf('}', start));
+  const m = /content:\s*"((?:[^"\\]|\\.)*)"/.exec(rule);
+  assert.ok(m, `${selector} has no content`);
+  return m[1];
+};
+
+test('the guardrail chip shows a check mark when it passed and a cross when it blocked, as real glyphs', () => {
+  assert.equal(contentOf('.badge.guardrail::before'), '\\2713');
+  assert.equal(unescapeCss(contentOf('.badge.guardrail::before')), '\u2713'); // the check mark
+  assert.equal(contentOf('.badge.guardrail.blocked::before'), '\\2715');
+  assert.equal(unescapeCss(contentOf('.badge.guardrail.blocked::before')), '\u2715'); // the multiplication-x cross
+  // They are not the same glyph as each other or as the tool chip's check, and the text is in the word, not the colour.
+  assert.notEqual(contentOf('.badge.guardrail::before'), contentOf('.badge.guardrail.blocked::before'));
+});
+
+test('every decorative glyph in the stylesheet is one of the intended ones (nothing was mangled into stray characters)', () => {
+  const found = [...css.matchAll(/content:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => unescapeCss(m[1]));
+  const allowed = new Set(['', '\u2713', '\u2715', '\u25a4', '!', '\u2014']);
+  for (const glyph of found) assert.ok(allowed.has(glyph), `unexpected content ${JSON.stringify(glyph)} (code points ${[...glyph].map((c) => c.codePointAt(0).toString(16)).join(' ')})`);
+  assert.ok(found.length >= 5);
+  // and the raw file has no stray Latin-1 look-alikes such as the superscript one that appeared once
+  assert.ok(!/[\u00b9\u00b2\u00b3]/.test(css), 'a superscript digit is in the stylesheet');
+});

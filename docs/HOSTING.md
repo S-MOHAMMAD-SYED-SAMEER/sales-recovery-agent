@@ -60,7 +60,14 @@ Steps marked **[YOU]** need your own account, payment method or credential.
    CHROMA_PORT=443
    CHROMA_SSL=true
    CHROMA_COLLECTION=sales_recovery_kb
+   SHOW_COLD_START_NOTICE=true
    ```
+
+   **`SHOW_COLD_START_NOTICE=true`** turns on a line in the chat page, "Waking up the support assistant - this may take a
+   few seconds on the first message", shown only if the first reply of a page load takes more than 2.5 s. It is for a
+   free-tier host that puts an idle service to sleep, where the first request really does wait for it to start. It is **off
+   by default** because on a local run (or an always-on host) the message would be untrue. The page learns the setting from
+   `GET /api/mode` (`coldStartNotice`), so changing it needs a restart, not a rebuild.
 
    Leave `PORT`, `SQLITE_PATH` and `KB_DIR` unset; they default correctly. The optional model-call
    limits (`LLM_TIMEOUT_MS`, `LLM_MAX_RETRIES`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_TEMPERATURE`) are in
