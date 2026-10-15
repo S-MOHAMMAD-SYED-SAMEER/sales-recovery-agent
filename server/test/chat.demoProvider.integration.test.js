@@ -106,3 +106,18 @@ test('an unsupported question under the demo provider still returns 200 with the
   assert.equal(result.status, 200);
   assert.match(result.body.reply, /fixed set of example customer-support scenarios/i);
 });
+
+test('a discount check made through the real tool path is kept for the rest of that conversation only', async () => {
+  const store = freshStore();
+  const result = await handleChat({ sessionId: 'kept', message: 'Is WELCOME10 valid?' }, { conversationStore: store });
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.toolsUsed, ['checkDiscount']);
+  const kept = store.getVerifiedDiscounts('kept');
+  assert.deepEqual(kept.map((record) => [record.code, record.valid, record.percentOff]), [['WELCOME10', true, 10]]);
+  assert.deepEqual(store.getVerifiedDiscounts('someone-else'), []);
+
+  // An order lookup in the same conversation adds nothing to it.
+  await handleChat({ sessionId: 'kept', message: 'order 1001 status' }, { conversationStore: store });
+  assert.equal(store.getVerifiedDiscounts('kept').length, 1);
+});

@@ -35,13 +35,14 @@ function checkPolicies(context) {
   return violations.length === 0 ? { safe: true, violations: [] } : { safe: false, violations };
 }
 
-// context: { reply, toolsUsed }. Returns { safe, violations, finalReply }.
+// context: { reply, toolsUsed, verifiedDiscounts }. `verifiedDiscounts` are the checkDiscount results
+// from earlier turns of the SAME conversation (never another one). Returns { safe, violations, finalReply }.
 // finalReply is the reply text that should actually be shown to the user
 // and persisted to memory — the original reply when safe, the fallback
 // when not. Callers should never fall back to the original reply text
 // themselves on an unsafe result; use finalReply.
-export function validateReply({ reply, toolsUsed = [] }) {
-  const result = checkPolicies({ reply, toolsUsed });
+export function validateReply({ reply, toolsUsed = [], verifiedDiscounts = [] }) {
+  const result = checkPolicies({ reply, toolsUsed, verifiedDiscounts });
 
   if (result.safe) {
     return { safe: true, violations: [], finalReply: reply };

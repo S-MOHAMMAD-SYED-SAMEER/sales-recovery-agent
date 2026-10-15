@@ -1,6 +1,10 @@
+import { checkAgainstVerified, codesIn } from './verifiedDiscounts.js';
+
 // Explicit, individually testable guardrail policies over the assistant's
 // final reply text. Each policy is a pure function:
-//   (context: { reply, toolsUsed }) -> violation string | null
+//   (context: { reply, toolsUsed, verifiedDiscounts }) -> violation string | null
+// `verifiedDiscounts` are the checkDiscount results from EARLIER turns of this
+// conversation (see verifiedDiscounts.js); every other policy ignores it.
 //
 // Deliberately implemented as application logic (regex/keyword checks
 // against what actually happened this turn), not just prompt instructions —
@@ -67,19 +71,48 @@ function clauseAround(text, start, end) {
   return { prefix, suffix };
 }
 
-// The first match of `re` that is a claim, i.e. one that `isMention(prefix, suffix)` does
-// not excuse, as { matched, clause } (the matched phrase and the clause around it, which is
-// what the mention test looked at), or null. When a block looks wrong, these two are what
-// say why.
-function findClaim(text, re, isMention) {
+// Every match of `re` that is a claim, i.e. one that `isMention(prefix, suffix)` does not
+// excuse, as { matched, clause, sentence } (the matched phrase and the clause around it, which
+// is what the mention test looked at, and the whole sentence it is in with the phrases that WERE
+// excused as mentions taken out, so "I don't have a 50% off code, but WELCOME10 gives 10% off"
+// is judged on what it claims and not on what it refuses). When a block looks wrong, `matched`
+// and `clause` are what say why.
+function findClaims(text, re, isMention) {
   const global = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`);
+  const claims = [];
+  const excused = [];
   for (const match of text.matchAll(global)) {
-    const { prefix, suffix } = clauseAround(text, match.index, match.index + match[0].length);
-    if (!isMention(prefix, suffix)) {
-      return { matched: match[0], clause: `${prefix}${match[0]}${suffix}`.replace(/\s+/g, ' ').trim() };
+    const end = match.index + match[0].length;
+    const { prefix, suffix } = clauseAround(text, match.index, end);
+    if (isMention(prefix, suffix)) {
+      excused.push(match[0]);
+    } else {
+      claims.push({
+        matched: match[0],
+        clause: `${prefix}${match[0]}${suffix}`.replace(/\s+/g, ' ').trim(),
+        sentence: sentenceAround(text, match.index),
+      });
     }
   }
-  return null;
+  return claims.map((claim) => ({
+    ...claim,
+    sentence: excused.reduce((sentence, phrase) => sentence.split(phrase).join(' '), claim.sentence),
+  }));
+}
+
+function findClaim(text, re, isMention) {
+  return findClaims(text, re, isMention)[0] ?? null;
+}
+
+// The sentence a match is in.
+function sentenceAround(text, index) {
+  const before = text.slice(0, index);
+  const sentenceStart =
+    Math.max(before.lastIndexOf('. '), before.lastIndexOf('! '), before.lastIndexOf('? '), before.lastIndexOf('\n')) + 1;
+  const after = text.slice(index);
+  const ends = ['. ', '! ', '? ', '\n'].map((t) => after.indexOf(t)).filter((i) => i >= 0);
+  const sentenceEnd = ends.length ? index + Math.min(...ends) + 1 : text.length;
+  return text.slice(sentenceStart, sentenceEnd).trim();
 }
 
 // What a policy returns when it fires: the reason, which rule inside the policy matched, and
@@ -153,23 +186,36 @@ export const POLICIES = [
   {
     name: 'no_unverified_discount_claim',
     description:
-      'Do not state or imply a discount, code, percent-off or promotion (including that there is none) unless checkDiscount ran this turn.',
-    check({ reply, toolsUsed }) {
+      'Do not state or imply a discount, code, percent-off or promotion (including that there is none) unless checkDiscount ran this turn, or the claim is about a code checkDiscount verified earlier in this conversation and every detail matches that result exactly.',
+    check({ reply, toolsUsed, verifiedDiscounts = [] }) {
       if (usedTool(toolsUsed, 'checkDiscount')) return null;
-      const discount = findClaim(reply, DISCOUNT_CLAIM_RE, isDiscountMention);
-      if (discount) {
+
+      // Discount claims first, then promotion claims, as before; the first claim that is not
+      // covered by an earlier verification in this conversation is the violation.
+      const replyCodes = codesIn(reply);
+      const candidates = [
+        ...findClaims(reply, DISCOUNT_CLAIM_RE, isDiscountMention).map((claim) => ({ claim, rule: 'percent-or-code' })),
+        ...findClaims(reply, PROMOTION_CLAIM_RE, isPromotionMention).map((claim) => ({ claim, rule: 'promotion' })),
+      ];
+
+      for (const { claim, rule } of candidates) {
+        const earlier = verifiedDiscounts.length > 0 ? checkAgainstVerified({ ...claim, replyCodes }, verifiedDiscounts) : null;
+        if (earlier?.ok) continue;
+
+        const found = { matched: claim.matched, clause: claim.clause };
+        if (earlier) {
+          return violation(
+            `Reply makes a discount claim that does not match what checkDiscount verified earlier in this conversation: ${earlier.why}.`,
+            `${rule}-mismatch`,
+            found
+          );
+        }
         return violation(
-          'Reply mentions a discount/code/percent-off without checkDiscount having run this turn.',
-          'percent-or-code',
-          discount
-        );
-      }
-      const promotion = findClaim(reply, PROMOTION_CLAIM_RE, isPromotionMention);
-      if (promotion) {
-        return violation(
-          'Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn.',
-          'promotion',
-          promotion
+          rule === 'percent-or-code'
+            ? 'Reply mentions a discount/code/percent-off without checkDiscount having run this turn.'
+            : 'Reply makes a claim about promotions or discounts (that they exist, or that none do) without checkDiscount having run this turn.',
+          rule,
+          found
         );
       }
       return null;

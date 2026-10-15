@@ -24,6 +24,13 @@ export function createConversationStore(db) {
     ORDER BY id ASC
   `);
 
+  const insertVerifiedStmt = db.prepare(
+    'INSERT INTO verified_discounts (conversation_id, code, result) VALUES (?, ?, ?)'
+  );
+  const getVerifiedStmt = db.prepare(
+    'SELECT result FROM verified_discounts WHERE conversation_id = ? ORDER BY id ASC'
+  );
+
   function getOrCreateConversation(sessionId) {
     const existing = getConversationStmt.get(sessionId);
     if (existing) return existing;
@@ -46,6 +53,21 @@ export function createConversationStore(db) {
     insertMessageStmt.run(conversation.id, role, content);
   }
 
+  // A checkDiscount result, exactly as the tool returned it, kept against THIS conversation.
+  // Anything without a string `code` is not a discount verification and is not kept.
+  function saveVerifiedDiscount(sessionId, result) {
+    if (!result || typeof result.code !== 'string') return;
+    const conversation = getOrCreateConversation(sessionId);
+    insertVerifiedStmt.run(conversation.id, result.code.toUpperCase(), JSON.stringify(result));
+  }
+
+  // The checkDiscount results from this conversation only, oldest first. An unknown session has none.
+  function getVerifiedDiscounts(sessionId) {
+    const conversation = getConversationStmt.get(sessionId);
+    if (!conversation) return [];
+    return getVerifiedStmt.all(conversation.id).map((row) => JSON.parse(row.result));
+  }
+
   // Closing is the only thing here that touches `db` directly, and that is the
   // point of having it: the prepared statements above do not keep the database
   // object alive on Node 22, so a store built as
@@ -56,5 +78,5 @@ export function createConversationStore(db) {
     db.close();
   }
 
-  return { getOrCreateConversation, getHistory, saveMessage, close };
+  return { getOrCreateConversation, getHistory, saveMessage, saveVerifiedDiscount, getVerifiedDiscounts, close };
 }
