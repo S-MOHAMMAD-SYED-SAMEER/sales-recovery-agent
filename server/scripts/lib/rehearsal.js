@@ -85,3 +85,55 @@ export function judge({ perPrompt, rows, runs, mustNotBlock, citedStep, aborted 
     takes: runs,
   };
 }
+
+// Whether the trace a reply came with agrees with what the turn really did. The trace is recorded by
+// the server as the turn runs, and the same turn also yields `toolsUsed`, `signals`, the usage record
+// and the guardrail verdict, which are produced by other code. A trace that disagrees with them is a
+// bug in the recording, so the rehearsal compares them on every reply it makes. Returns a list of
+// problems (empty when the trace is consistent).
+//
+//   turn: { body: { trace, toolsUsed, signals }, usage, guardrail: { safe }, toolResults }
+//   policyNames: the guardrail policies that should have been checked, in order
+//   secrets: strings that must appear nowhere in the trace (the API key)
+export function traceProblems(turn, { policyNames = [], secrets = [] } = {}) {
+  const problems = [];
+  const trace = turn?.body?.trace;
+  if (!trace || !Array.isArray(trace.steps)) return ['the reply has no trace'];
+  const steps = trace.steps;
+  const of = (type) => steps.filter((s) => s.type === type);
+
+  if (typeof trace.totalMs !== 'number' || trace.totalMs < 0) problems.push('totalMs is not a number');
+
+  const tools = of('tool').map((s) => s.name);
+  const toolsUsed = turn.body.toolsUsed ?? [];
+  if (JSON.stringify(tools) !== JSON.stringify(toolsUsed)) problems.push(`tool steps ${JSON.stringify(tools)} differ from toolsUsed ${JSON.stringify(toolsUsed)}`);
+
+  const searched = toolsUsed.filter((n) => n === 'searchKnowledgeBase').length;
+  if (of('retrieve').length !== searched) problems.push(`${of('retrieve').length} retrieve step(s) for ${searched} knowledge-base search(es)`);
+  for (const r of of('retrieve')) {
+    if (!r.unavailable && r.sources.length > 0 && !r.chunks.every((c) => c.id)) problems.push('a retrieved chunk has no id');
+  }
+
+  const signals = (turn.body.signals ?? []).map((s) => s.type);
+  const traced = of('signal').map((s) => s.signal);
+  if (JSON.stringify(signals) !== JSON.stringify(traced)) problems.push(`signal steps ${JSON.stringify(traced)} differ from signals ${JSON.stringify(signals)}`);
+
+  const calls = turn.usage?.calls ?? null;
+  if (calls !== null && of('model').length !== calls) problems.push(`${of('model').length} model step(s) for ${calls} model call(s)`);
+  if (calls !== null && of('model').some((m) => typeof m.latencyMs !== 'number' || typeof m.tokensIn !== 'number' || typeof m.tokensOut !== 'number')) {
+    problems.push('a model step lacks latency or token counts');
+  }
+
+  const checks = of('guardrail');
+  if (policyNames.length && JSON.stringify(checks.map((c) => c.policy)) !== JSON.stringify(policyNames)) problems.push('the guardrail steps are not one per policy, in order');
+  if (checks.some((c) => c.outcome === 'block') === Boolean(turn.guardrail?.safe)) problems.push('the guardrail steps disagree with the guardrail verdict');
+
+  const order = steps.map((s) => s.type);
+  const firstGuardrail = order.indexOf('guardrail');
+  if (firstGuardrail !== -1 && order.slice(firstGuardrail).some((t) => t !== 'guardrail')) problems.push('a step follows the guardrail steps');
+  if (order.includes('signal') && order.indexOf('signal') !== 0) problems.push('a signal step is not first');
+
+  const text = JSON.stringify(trace);
+  for (const secret of secrets) if (secret && text.includes(secret)) problems.push('the trace contains a secret');
+  return problems;
+}

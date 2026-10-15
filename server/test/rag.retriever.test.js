@@ -16,7 +16,7 @@ test('returns relevant matches formatted with source, heading, text, and score',
 
   const results = await retriever.retrieve('shipping question');
 
-  assert.deepEqual(results, [{ source: 'shipping.md', heading: 'H', text: 'Shipping info', score: 0.8 }]);
+  assert.deepEqual(results, [{ id: 'a', source: 'shipping.md', heading: 'H', text: 'Shipping info', score: 0.8 }]);
 });
 
 test('filters out matches below the relevance threshold — irrelevant content is not returned', async () => {

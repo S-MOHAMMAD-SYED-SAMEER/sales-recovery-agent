@@ -562,7 +562,7 @@ test("a reply's token usage is logged as numbers only and returned beside, not i
 
   assert.equal(result.status, 200);
   assert.equal(result.usage.totalTokens, 15);
-  assert.deepEqual(Object.keys(result.body).sort(), ['reply', 'signals', 'toolsUsed']);
+  assert.deepEqual(Object.keys(result.body).sort(), ['reply', 'signals', 'toolsUsed', 'trace']);
   const line = logged.find((l) => l.includes('model usage'));
   assert.equal(line, '[chat] model usage: calls=1 inputTokens=10 outputTokens=5 totalTokens=15 latencyMs=321');
   assert.doesNotMatch(logged.join('\n'), /hi there|hello/);

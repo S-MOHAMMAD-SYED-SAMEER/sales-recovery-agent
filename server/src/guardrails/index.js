@@ -14,6 +14,8 @@ export const SAFE_FALLBACK_REPLY =
 // see validateReply's own try/catch for that.
 function checkPolicies(context) {
   const violations = [];
+  // Every policy that ran and what it decided, in order, for the turn's trace.
+  const checks = [];
 
   for (const policy of POLICIES) {
     let result;
@@ -24,6 +26,7 @@ function checkPolicies(context) {
       // silent pass — failing safe applies to the guardrail code too.
       result = { reason: `Guardrail check "${policy.name}" threw: ${err.message}`, rule: 'policy-threw' };
     }
+    checks.push({ policy: policy.name, outcome: result ? 'block' : 'pass' });
     if (result) {
       // A policy returns a bare reason string, or { reason, rule, matched, clause }: which rule
       // inside the policy fired and the phrase that triggered it.
@@ -32,7 +35,7 @@ function checkPolicies(context) {
     }
   }
 
-  return violations.length === 0 ? { safe: true, violations: [] } : { safe: false, violations };
+  return violations.length === 0 ? { safe: true, violations: [], checks } : { safe: false, violations, checks };
 }
 
 // context: { reply, toolsUsed, verifiedDiscounts }. `verifiedDiscounts` are the checkDiscount results
@@ -44,11 +47,13 @@ function checkPolicies(context) {
 export function validateReply({ reply, toolsUsed = [], verifiedDiscounts = [] }) {
   const result = checkPolicies({ reply, toolsUsed, verifiedDiscounts });
 
+  // `checks` is one { policy, outcome: 'pass' | 'block' } per policy that ran: the trace shows them.
+  const checks = result.checks.map(({ policy, outcome }) => ({ policy, outcome }));
   if (result.safe) {
-    return { safe: true, violations: [], finalReply: reply };
+    return { safe: true, violations: [], checks, finalReply: reply };
   }
 
-  return { safe: false, violations: result.violations, finalReply: SAFE_FALLBACK_REPLY };
+  return { safe: false, violations: result.violations, checks, finalReply: SAFE_FALLBACK_REPLY };
 }
 
 export { POLICIES };

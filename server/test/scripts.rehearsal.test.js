@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { citesReturnWindow, judge, knowledgeBaseProblem, knowledgeBaseUse, returnWindowDays, summarisePrompts } from '../scripts/lib/rehearsal.js';
+import { citesReturnWindow, judge, knowledgeBaseProblem, knowledgeBaseUse, returnWindowDays, summarisePrompts, traceProblems } from '../scripts/lib/rehearsal.js';
+import { generateReply } from '../src/llm/index.js';
+import { runToolLoop } from '../src/llm/toolLoop.js';
+import { businessTools } from '../src/tools/index.js';
+import { POLICIES } from '../src/guardrails/index.js';
 import { handleChat } from '../src/routes/chat.js';
 import { createDb } from '../src/memory/db.js';
 import { createConversationStore } from '../src/memory/conversationStore.js';
@@ -164,4 +168,64 @@ test('the rehearsal refuses to start, with no model call, when Chroma is not the
   assert.match(result.stderr, /Chroma is not available, so the knowledge base is not\. Not starting: no model call was made\./);
   assert.ok(!/AQ\.fake-key/.test(result.stdout + result.stderr));
   assert.ok(!/model usage/.test(result.stdout), 'no model was called');
+});
+
+// --- the trace is checked against what the same turn produced by other routes ----------------------------
+
+function scripted(script) {
+  return {
+    async generateReply({ executeTool }) {
+      let i = 0;
+      return runToolLoop({
+        initialState: null,
+        callModel: async () => {
+          const entry = script[i++];
+          const usage = { inputTokens: 10, outputTokens: 2, latencyMs: 4 };
+          return entry.calls ? { text: '', functionCalls: entry.calls, usage } : { text: entry.text, functionCalls: [], usage };
+        },
+        appendToolExchange: (state) => state,
+        executeTool,
+      });
+    },
+  };
+}
+
+async function turn(message, script) {
+  return handleChat(
+    { sessionId: 's', message },
+    {
+      conversationStore: createConversationStore(createDb(':memory:')),
+      generateReply: (a) => generateReply(a, { provider: scripted(script), tools: businessTools, providerName: 'scripted', modelId: 'm' }),
+    }
+  );
+}
+const policyNames = POLICIES.map((p) => p.name);
+
+test('a trace that agrees with the turn has no problems', async () => {
+  const clean = await turn('order 1001 status', [{ calls: [{ name: 'getOrderStatus', args: { orderId: '1001' } }] }, { text: 'Shipped.' }]);
+  assert.deepEqual(traceProblems(clean, { policyNames }), []);
+
+  const blocked = await turn('hello', [{ text: "I'll refund you right away!" }]);
+  assert.equal(blocked.guardrail.safe, false);
+  assert.deepEqual(traceProblems(blocked, { policyNames }), []);
+});
+
+test('each way a trace can disagree with the turn is reported', async () => {
+  const good = await turn('order 1001 status', [{ calls: [{ name: 'getOrderStatus', args: { orderId: '1001' } }] }, { text: 'Shipped.' }]);
+  const withTrace = (mutate) => {
+    const copy = structuredClone({ body: good.body, usage: good.usage, guardrail: good.guardrail });
+    mutate(copy);
+    return traceProblems(copy, { policyNames, secrets: ['SECRET-KEY-VALUE'] });
+  };
+
+  assert.deepEqual(traceProblems({ body: {} }, {}), ['the reply has no trace']);
+  assert.match(withTrace((t) => { t.body.trace.steps = t.body.trace.steps.filter((s) => s.type !== 'tool'); })[0], /tool steps/);
+  assert.match(withTrace((t) => { t.body.toolsUsed = []; })[0], /tool steps/);
+  assert.ok(withTrace((t) => { t.usage.calls = 5; }).some((p) => /model step/.test(p)));
+  assert.ok(withTrace((t) => { t.body.signals = [{ type: 'price_concern' }]; }).some((p) => /signal steps/.test(p)));
+  assert.ok(withTrace((t) => { t.body.trace.steps = t.body.trace.steps.slice(0, -1); }).some((p) => /one per policy/.test(p)));
+  assert.ok(withTrace((t) => { t.guardrail.safe = false; }).some((p) => /disagree with the guardrail verdict/.test(p)));
+  assert.ok(withTrace((t) => { t.body.trace.steps.push({ type: 'model' }); }).some((p) => /follows the guardrail/.test(p)));
+  assert.ok(withTrace((t) => { t.body.trace.steps[0].summary = 'leaked SECRET-KEY-VALUE'; }).some((p) => /secret/.test(p)));
+  assert.ok(withTrace((t) => { t.body.trace.totalMs = 'x'; }).some((p) => /totalMs/.test(p)));
 });

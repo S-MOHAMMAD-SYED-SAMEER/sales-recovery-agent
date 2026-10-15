@@ -28,10 +28,13 @@ src/
   rag/                 chunker, ingest, local embeddings, Chroma wrapper, retriever, the searchKnowledgeBase tool
   signals/             six regex detectors and the one-line prompt directive for each
   guardrails/          eight policies and the fixed fallback reply
+  trace/               the per-turn trace recorder (AsyncLocalStorage), the whitelist and the secret scrubber
   memory/              SQLite conversation store (node:sqlite)
   middleware/          in-memory rate limiter
   eval/                dataset schema, deterministic metrics, runner, optional judge
 scripts/               demo, ingest, eval, smoke, guardrail-fp, rate-limit-probe
+../web/                the chat page: index.html (markup), styles.css (themes, layout), app.js (the page),
+                       trace.js (chips and the Operator panel), format.js (a reply as text nodes)
 ```
 
 ## 1. A request, start to finish
@@ -55,7 +58,7 @@ flowchart TD
     J -- "all passed" --> L["Reply stays"]
     K --> M["Save the user message and the FINAL reply<br/>(never the draft, never tool results)"]
     L --> M
-    M --> N["200 { reply, toolsUsed, signals }"]
+    M --> N["200 { reply, toolsUsed, signals, trace }"]
     H -- "error after retries" --> O["502, nothing saved"]
 ```
 
@@ -65,9 +68,70 @@ Three details carry most of the safety:
   something the customer was never shown.
 - **An empty or blocked model turn is a failure, not a reply.** It used to pass every guardrail (nothing
   to object to in an empty string) and be returned as a blank reply.
-- **The response body is just `{ reply, toolsUsed, signals }`.** The guardrail verdict, the draft and the
-  token usage are returned beside the body to the caller of `handleChat` (the evaluation and measurement
-  scripts) and never to the browser.
+- **The response body is `{ reply, toolsUsed, signals, trace }`.** The guardrail verdict with the model's
+  draft, and the raw tool results, are returned beside the body to the caller of `handleChat` (the
+  evaluation and measurement scripts) and never to the browser. The trace (next section) is the one
+  addition to what the browser receives, and it is built to be safe to show.
+
+## 1b. The per-turn trace
+
+The Operator view shows what the server did on a turn. That list is the `trace` in the response, and it is
+**recorded while the turn runs, not reconstructed afterwards.**
+
+```mermaid
+flowchart LR
+    S["handleChat starts the trace<br/>(clock starts)"] --> SG["signal steps<br/>one per signal that fired,<br/>with the phrase it matched"]
+    SG --> CTX["generateReply runs inside<br/>runWithTrace(trace)"]
+    CTX --> TL["tool loop: after each model call,<br/>a model step (provider, model, ms, tokens in/out)"]
+    CTX --> EX["tool executor wrapper: opens a tool step<br/>before the tool runs, closes it with a<br/>short result summary"]
+    EX --> KB["knowledge-base tool: a retrieve step<br/>(files and chunk ids, no text)"]
+    TL --> GR["guardrail steps, last:<br/>one per policy, pass or block"]
+    EX --> GR
+    KB --> GR
+    GR --> SNAP["trace.snapshot() -> steps + totalMs<br/>in the response body"]
+```
+
+Why recorded, not reconstructed. The alternative is to look at the finished reply and the list of tools that
+ran and infer a story: "it mentioned a return policy, so it must have searched". An inferred trace can be wrong
+in exactly the cases an operator opens it for, and a demo that shows steps that did not happen is worse than one
+that shows none. Here each step is added by the code that did the work, at the moment it did it, so the order,
+the timings and the contents are what really happened, and a step that did not run cannot appear. The rehearsal
+script (`scripts/video-rehearsal.js`) also checks, on every real reply, that the trace agrees with the same turn's
+`toolsUsed`, `signals`, usage record and guardrail verdict, which are produced by other code.
+
+How it gets there without changing any provider: `handleChat` runs `generateReply` inside an
+`AsyncLocalStorage` context holding the trace, and the three places that already see each event call
+`currentTrace()?.…`: the tool loop (a model call), the tool executor wrapper in `llm/index.js` (a tool), and the
+knowledge-base tool (a retrieval). Outside a turn there is no context and those calls do nothing, so unit tests of
+a single module are unchanged. The demo provider makes no model call, and its step says so ("Demo assistant:
+scripted replies, no model was called") rather than showing a model.
+
+What a step may contain is decided by a whitelist in `src/trace/index.js`, not by "remember to leave things out":
+
+| Step | Holds |
+|---|---|
+| `signal` | the signal type, its confidence, the phrase that matched (capped, one line) |
+| `model` | provider, model id, latency in ms, tokens in and out as the adapter reported them (`null` when it did not) |
+| `tool` | the tool name, its arguments (up to 8, each a plain string capped at 120 characters), whether it succeeded, a one-line summary, ms |
+| `retrieve` | the query (capped), the source file names, and per chunk its id, heading and relevance. Never the text |
+| `guardrail` | one per policy: its name and `pass` or `block`; a block adds the reason and rule. The matched phrase and the draft stay in the server log |
+
+Every string that reaches a trace is cleaned: control characters and newlines removed, length capped, and the
+value of any environment variable whose name contains KEY, TOKEN, SECRET, PASSWORD, AUTH or CREDENTIAL (and the
+shape of a Gemini, OpenAI-style or Bearer credential) replaced with `[redacted]`, so even a customer who types a
+key back, or an error message that contains one, cannot put it in the response. A failed tool shows its
+controlled message ("getOrderStatus failed to execute."), never its stack. The trace never contains the system
+prompt. A trace holds at most 64 steps.
+
+The guardrail outcome is `pass` or `block`. There is no "rewrite": when any policy objects, the whole reply is
+replaced by the fixed fallback, so there is no partial edit to report.
+
+On the page, `trace.js` turns the steps into rows (the eight guardrail steps are shown as one row so a clean turn
+is a single "Guardrail: passed" line) and draws them, and the chips under an answer, with `createElement` and
+text nodes only. A test asserts that no script in `web/` uses `innerHTML` or any other API that parses markup.
+While a reply is pending the page shows one "Working…" line and, in the Operator panel, says the steps will
+appear when the reply arrives: it cannot know the steps before the server has finished, and it does not guess.
+Streaming them as they happen (server-sent events) is planned for v1.1.
 
 ## 2. Tool calling
 
@@ -257,10 +321,11 @@ failed case with no checks (it used to be graded on the text "[HTTP 502]", which
 | `node:sqlite` | No dependency, no build step | Needs Node 22.13 or later |
 | Chroma behind a thin wrapper | Required by the brief; a self-healing handle for ephemeral hosts | A second process to run (`npm run demo` starts it) |
 | Mock business tools | An honest stand-in for a store API | No authentication: anyone can look up any order number |
+| A recorded trace, returned to every browser | The page can show only what really happened, with nothing animated or invented | The response is larger, and the trace is a second output that must be kept safe to show (whitelist, scrubbing, caps), which is tested |
 
 ## 10. Not built
 
 No code check for product-fact claims beyond discount, stock, order status and promotions (v1.1: verify claims
 against the knowledge base). No authentication, no real store or CRM, no payment handling, no human handoff (the fallback only says
-support can help), no streaming, no rate limiting per user (it is per IP, and behind a proxy all visitors
+support can help), no streaming of the steps (the page shows one "Working…" line until the reply arrives; SSE is planned for v1.1), no rate limiting per user (it is per IP, and behind a proxy all visitors
 share one bucket), no multi-language support. Hosting your own copy is described in [HOSTING.md](./HOSTING.md).

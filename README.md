@@ -45,7 +45,7 @@ below can be re-derived from those files.
 
 | | Result |
 |---|---|
-| Tests | **440 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
+| Tests | **495 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
 | Mock evaluation | **21/21**. It replays scripted answers, so it checks the code around the model, **not a model** |
 | **Real evaluation, run 1** (the 21 cases) | **18/21 (85.7%)** |
 | **Real evaluation, fresh run** (21 new replies) | **21/21**: tool selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10 |
@@ -86,7 +86,7 @@ flowchart TD
     I -->|unsafe| K[Safe fallback reply]
     K --> J
     J --> L[Persist user + final reply<br/>SQLite]
-    L --> M[Response to customer<br/>reply + toolsUsed + signals]
+    L --> M[Response to customer<br/>reply + toolsUsed + signals + trace]
 ```
 
 The model makes three decisions: what to say, whether to call a tool, and what to say once a tool
@@ -109,7 +109,26 @@ draft, deciding what is saved) is ordinary code that runs whether or not the mod
 - **Failure handling.** A model error, timeout or rate limit that outlasts the retries, and an empty or blocked
   reply, return a 502 and persist nothing. A Chroma outage is never reported as "we have no such policy".
 
-Diagrams of the request flow, tool calling, retries, signal detection and guardrails are in
+### The Operator view
+
+The header has a **Customer / Operator** toggle. Customer is the plain chat, with chips under each answer for the
+tools that ran, the knowledge-base files it drew on (`returns-policy.md`) and what it noticed. **Operator** adds
+a panel with the steps the server took on the selected reply, in order: *Signal: hesitation*, *Model call*
+(provider, model, latency, tokens in and out), *Called `getOrderStatus`* (arguments and a one-line result),
+*Searched knowledge base* with the files and chunk ids it returned, and *Guardrail: passed* with the eight
+policies listed (or *Guardrail: blocked*, naming the policy and why). Click a reply, or its "View steps" button,
+to see that reply's steps. On a screen narrower than 900 px the panel is a bottom sheet.
+
+Everything in it comes from the `trace` the server returns with the reply, recorded while the turn ran and not
+reconstructed afterwards: nothing is animated or filled in, and the page shows a single "Working…" line while a
+reply is pending, because that is all it knows until the reply arrives. Streaming the steps live (SSE) is planned
+for v1.1. The trace holds names, ids, counts and numbers; never a key, the environment, a stack trace, the system
+prompt or a passage's text, and anything a customer typed is capped and shown as text.
+
+The store ("Fernbrook Goods") and its mark are invented, and the page says so permanently. The page follows the
+system light/dark setting and has a manual toggle.
+
+Diagrams of the request flow, the trace, tool calling, retries, signal detection and guardrails are in
 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## Providers
@@ -148,7 +167,8 @@ Copy `server/.env.example` to `server/.env`. Every variable is optional with the
 | `EVAL_DELAY_MS` | `8000` | Pause between cases and judge calls in `eval:real` |
 
 `POST /api/chat` takes `{ sessionId, message }` (`sessionId`: 1-64 characters of letters, digits,
-`-` or `_`; `message`: at most 2,000 characters) and returns `{ reply, toolsUsed, signals }`.
+`-` or `_`; `message`: at most 2,000 characters) and returns `{ reply, toolsUsed, signals, trace }`,
+where `trace` is what the server did on that turn (see [The Operator view](#the-operator-view)).
 `GET /api/health` returns `{ "status": "ok" }`.
 
 ## Tests and evaluation
@@ -180,14 +200,16 @@ server/
     rag/                 chunker, ingest, local embeddings, Chroma wrapper, retrieval, the KB tool
     signals/             six regex detectors and their prompt directives
     guardrails/          eight policies and the fallback reply
+    trace/               the per-turn trace: recorded as the turn runs, whitelisted and scrubbed
     memory/              SQLite conversation store
     middleware/          rate limiter
     eval/                dataset schema, metrics, runner, optional judge
   data/kb/               the four knowledge-base documents
   eval/                  the versioned dataset and the prompt sets used for real-model checks
   scripts/               demo, ingest, eval, smoke, guardrail-fp, rate-limit-probe
-  test/                  the test suite (440 tests, 35 files)
-web/index.html           the demo chat page (no framework, no build step)
+  test/                  the test suite (495 tests, 38 files)
+web/                     the demo chat page: index.html, styles.css, app.js, trace.js, format.js
+                         (no framework, no build step, no script that parses HTML)
 chroma/Dockerfile        a pinned Chroma image, only needed for hosting
 docs/                    ARCHITECTURE.md, TESTING.md, HOSTING.md, images/, results/
 PROJECT-1.md             the case-study write-up

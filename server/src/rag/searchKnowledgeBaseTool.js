@@ -1,4 +1,5 @@
 import { ToolValidationError } from '../tools/errors.js';
+import { currentTrace } from '../trace/index.js';
 import { retriever as defaultRetriever, knowledgeBaseRestorer as defaultRestorer } from './index.js';
 
 // Registered as a tool (same shape as the business tools: name,
@@ -86,13 +87,19 @@ export function buildExecute(retriever, restorer) {
           // Retrieval worked a moment ago but the store can't be read or
           // written now — that is an outage, not an empty policy shelf, and
           // must not be reported to the customer as "we have no such policy".
+          currentTrace()?.retrieve({ query, results: [], unavailable: true });
           return { found: false, unavailable: true, message: UNAVAILABLE_MESSAGE };
         }
       }
     } catch (err) {
       console.error('[rag] Knowledge-base retrieval failed:', err.message);
+      currentTrace()?.retrieve({ query, results: [], unavailable: true });
       return { found: false, unavailable: true, message: UNAVAILABLE_MESSAGE };
     }
+
+    // What the knowledge base returned, for the turn's trace: files and chunk ids, not the passages
+    // (and nothing here reaches the model, which sees only the result below).
+    currentTrace()?.retrieve({ query, results });
 
     if (results.length === 0) {
       return {

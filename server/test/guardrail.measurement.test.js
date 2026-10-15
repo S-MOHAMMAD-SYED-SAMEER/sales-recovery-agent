@@ -24,7 +24,7 @@ test('handleChat returns the guardrail verdict and the model draft beside the bo
   assert.deepEqual(blocked.guardrail.violations.map((v) => v.name), ['no_unsupported_refund_promise']);
   assert.ok(blocked.guardrail.violations[0].reason);
   assert.notEqual(blocked.body.reply, blocked.guardrail.draft); // the customer got the fallback
-  assert.deepEqual(Object.keys(blocked.body).sort(), ['reply', 'signals', 'toolsUsed']);
+  assert.deepEqual(Object.keys(blocked.body).sort(), ['reply', 'signals', 'toolsUsed', 'trace']);
 
   const fine = await handleChat(
     { sessionId: 's2', message: 'hello' },

@@ -5,6 +5,7 @@ import { conversationStore as defaultConversationStore } from '../memory/index.j
 import { detectSignals, buildSignalDirective } from '../signals/index.js';
 import { validateReply } from '../guardrails/index.js';
 import { formatUsage } from '../llm/usage.js';
+import { createTrace, runWithTrace } from '../trace/index.js';
 
 const router = Router();
 
@@ -48,6 +49,8 @@ const BASE_SYSTEM_PROMPT =
 // — a future turn's history should not "remember" a fabricated claim just
 // because it was caught before being shown to the user.
 export async function handleChat({ sessionId, message }, deps = {}) {
+  // Started first so totalMs covers the whole turn. See trace/index.js: steps are recorded as they happen.
+  const trace = createTrace();
   const generateReply = deps.generateReply || defaultGenerateReply;
   const conversationStore = deps.conversationStore || defaultConversationStore;
   const usingRealProvider = !deps.generateReply;
@@ -109,16 +112,19 @@ export async function handleChat({ sessionId, message }, deps = {}) {
   // trigger any action outside this response.
   const signals = detectSignals(message, { sourceMessageIndex: history.length });
   const systemPrompt = BASE_SYSTEM_PROMPT + buildSignalDirective(signals);
+  for (const s of signals) trace.signal(s);
 
   let text;
   let toolsUsed;
   let toolResults = [];
   let usage = null;
   try {
-    const result = await generateReply({
-      systemPrompt,
-      messages: [...history, { role: 'user', content: message }],
-    });
+    const result = await runWithTrace(trace, () =>
+      generateReply({
+        systemPrompt,
+        messages: [...history, { role: 'user', content: message }],
+      })
+    );
     // A blocked, truncated-to-nothing or otherwise empty model turn is a
     // failed turn, not a reply. Left alone it would reach the guardrails (which
     // find nothing to object to in an empty string), be returned as a blank or
@@ -155,6 +161,12 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     }
   }
   const finalReply = guardrailResult.finalReply;
+  // One step per policy that ran. A blocked policy carries its reason and rule (what it matched is
+  // in the server log, not here: it is part of the draft).
+  for (const { policy, outcome } of guardrailResult.checks) {
+    const violation = guardrailResult.violations.find((v) => v.name === policy);
+    trace.guardrail({ policy, outcome, reason: violation?.reason, rule: violation?.rule });
+  }
 
   // Only the plain user/assistant text is persisted — the tool-call/tool-result
   // exchange that may have happened inside generateReply() is internal to that
@@ -202,7 +214,7 @@ export async function handleChat({ sessionId, message }, deps = {}) {
 
   // What each tool returned this turn, beside the body like `usage` and `guardrail`: for scripts that
   // need to know, for example, that the knowledge base answered. Never sent to the client.
-  return { status: 200, body: { reply: finalReply, toolsUsed, signals }, usage, guardrail, toolResults };
+  return { status: 200, body: { reply: finalReply, toolsUsed, signals, trace: trace.snapshot() }, usage, guardrail, toolResults };
 }
 
 router.post('/chat', async (req, res) => {
