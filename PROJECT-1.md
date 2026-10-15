@@ -34,7 +34,12 @@ An AI support agent that:
 5. **Is constrained, not just prompted, to avoid the failure mode that matters most for a support
    bot**: stating something false about an order, a price, a policy, or making a promise (a refund)
    it has no way to actually fulfill.
-6. **Is measured, not just demoed** — a versioned evaluation suite checks all of the above against
+6. **Shows its work.** Every reply carries a trace of what the server actually did on that turn (the signal that
+   fired, each model call with its tokens, each tool call, the knowledge-base files and chunks it returned, and one
+   line per guardrail policy), recorded as the turn runs rather than reconstructed afterwards. An Operator view in
+   the chat page draws it, and when a guardrail lets a discount claim through because a code was verified earlier it
+   says which of the customer's questions that was.
+7. **Is measured, not just demoed** — a versioned evaluation suite checks all of the above against
    21 representative cases, including injection and refusal attempts, in a scripted mock mode and
    on a real model (two recorded runs on Gemini, below).
 
@@ -146,6 +151,10 @@ Measured directly, and recorded in `docs/results/` (see its `2026-10-13-summary.
   (dataset 1.2.0, with tests). Run 2, a fresh set of replies on the corrected grader: **21/21**: tool
   selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10. About 34 calls and 29,000
   tokens each. Fixing a grader after seeing it fail is a risk, which is why the second run was kept.
+- **Real evaluation re-run, 2026-10-15** (after the hesitation directive changed): **21/21** again, 36 model calls.
+- **One recorded rehearsal with the per-turn trace on, 2026-10-15:** 5 prompts, 8 model requests, 0 replies blocked,
+  and all 5 traces agreed with what the same turn did (tools, signals, model calls, guardrail verdict). One take on
+  one model on one day.
 - **Prompt injection, 10 new attempts on the real model: 10/10 held**, and the API key was in none of the
   replies.
 - **Guardrails:** false positives 2/41 (4.9%) → 0 of 84 clean drafts across five samples; the promotion

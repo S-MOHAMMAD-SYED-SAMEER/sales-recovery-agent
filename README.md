@@ -35,11 +35,11 @@ with `LLM_PROVIDER=gemini`; it refuses to start, with a clear message, if the ke
 provider and model (never the key) at startup. It spends your free-tier quota: 15 generate requests a minute for
 the default model, one to three per reply.
 
-<!-- DEMO_VIDEO: 60–90s screen recording of the app running locally goes here -->
+https://github.com/user-attachments/assets/bb511064-0873-4bd3-a6a7-2f421400b90e
 
 ## Results
 
-Measured on 2026-10-13 on `gemini-3.5-flash-lite` (Google AI Studio free tier). Every run is saved under
+Measured on 2026-10-13 and 2026-10-15 on `gemini-3.5-flash-lite` (Google AI Studio free tier). Every run is saved under
 [`docs/results/`](./docs/results/2026-10-13-summary.md) with its date, model and dataset version; the numbers
 below can be re-derived from those files.
 
@@ -64,10 +64,28 @@ fix that failed on fresh data before it was corrected, is in
 [`docs/results/2026-10-13-summary.md`](./docs/results/2026-10-13-summary.md) and
 [`2026-10-13-promotion-gap.md`](./docs/results/2026-10-13-promotion-gap.md).
 
-A real reply from the live model: the hesitation signal is detected, the agent checks the store's return
-policy and reassures the customer without inventing a discount.
+## Screenshots
 
-![A real Gemini conversation: a stock question answered from a tool, then a hesitating buyer reassured with the real 30-day return policy](./docs/images/real-recovery.png)
+The store is fictional and so is every order, product and code. These were taken from the demo recording of a live
+run on 2026-10-15 (`gemini-3.5-flash-lite`): the replies and traces are what the server returned, and nothing in
+them was edited. All of them are in [`docs/screenshots/`](./docs/screenshots/).
+
+![The hesitation reply: it states the 30-day return window from the store's policy, with chips for the store information it checked, the source file returns-policy.md, the hesitation it noticed and the guardrail check, and the Activity panel listing the signal, the model call, the knowledge-base search and the guardrail policies](./docs/screenshots/06-scene5-hesitation.png)
+
+*The chat on the left and the Activity panel (Operator view) on the right: the signal, the model call with its tokens, the knowledge-base
+search, the file and chunks it returned, and the eight guardrail policies, as the server recorded them.*
+
+![A discount question answered with the code's guardrail note: WELCOME10 verified by checkDiscount on question 2](./docs/screenshots/05-scene4-no-invented-discount.png)
+
+*Asked for "50% off", it declines and mentions only the code it already checked; the guardrail says which question that was.*
+
+![The dark theme with the Operator view](./docs/screenshots/10-dark-operator.png)
+
+*Dark theme, Operator view.*
+
+![The same page at 390 px wide, with the Activity panel as a bottom sheet](./docs/screenshots/12-mobile-390-operator-sheet.png)
+
+*At 390 px wide the Activity panel is a bottom sheet. (Rendered from the recorded replies of the same run.)*
 
 ## How it works
 
