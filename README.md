@@ -35,7 +35,7 @@ with `LLM_PROVIDER=gemini`; it refuses to start, with a clear message, if the ke
 provider and model (never the key) at startup. It spends your free-tier quota: 15 generate requests a minute for
 the default model, one to three per reply.
 
-https://github.com/user-attachments/assets/bb511064-0873-4bd3-a6a7-2f421400b90e
+https://github.com/user-attachments/assets/8470aabd-aef0-4a69-b040-9a7786327fa4
 
 ## Results
 
