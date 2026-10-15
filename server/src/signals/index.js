@@ -12,10 +12,21 @@ const DIRECTIVES = {
   purchase_intent:
     'The customer is showing purchase intent — keep their path to buying as frictionless as ' +
     'possible; answer directly and avoid unnecessary friction.',
+  // The first version of this said only "address likely concerns ... using your tools/knowledge
+  // base", and on a real model the reply was sometimes vague: "we offer hassle-free returns on
+  // eligible items", with no window, after the knowledge base had been searched and had returned
+  // it. Reassurance is only worth anything if it is the actual policy, so it now asks for exactly
+  // that, and for nothing the knowledge base does not say.
   purchase_hesitation:
-    'The customer seems hesitant about buying — proactively address likely concerns (shipping, ' +
-    'returns, fit) using your tools/knowledge base, and reassure them. Never invent or imply a ' +
-    "discount that hasn't been verified with the discount tool.",
+    'The customer seems hesitant about buying. Search the knowledge base for the store\'s return ' +
+    'policy, then reassure them with what it actually says: state the return window exactly as the ' +
+    'knowledge base gives it (the number of days, counted from when), and mention one concrete ' +
+    'thing it lists, such as a prepaid return label for domestic orders, in your own words. Use only ' +
+    'facts from those search results. Never invent, round or estimate a window, a condition or a ' +
+    'benefit, and do not describe returns with words the knowledge base does not use (for example ' +
+    '"hassle-free", "easy" or "no questions asked"). If the search finds nothing, say you cannot ' +
+    "confirm the return policy right now. Never invent or imply a discount that hasn't been " +
+    'verified with the discount tool.',
   shipping_concern:
     'The customer has a shipping concern — proactively look up accurate shipping/delivery ' +
     'information for them using the knowledge base.',

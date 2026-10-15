@@ -45,13 +45,14 @@ below can be re-derived from those files.
 
 | | Result |
 |---|---|
-| Tests | **421 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
+| Tests | **440 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
 | Mock evaluation | **21/21**. It replays scripted answers, so it checks the code around the model, **not a model** |
 | **Real evaluation, run 1** (the 21 cases) | **18/21 (85.7%)** |
 | **Real evaluation, fresh run** (21 new replies) | **21/21**: tool selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10 |
+| Real evaluation, re-run after the hesitation directive changed | **21/21** again (36 model calls): tool selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10, hallucination 0/18 |
 | Why they differ | Run 1's three misses were **correct replies the grader scored wrongly** ("30-day" against a keyword "30 days"; "I'm not finding any information" not recognised as honest; a correct denial quoting "90-day" tripping a forbidden string). I fixed the grader, kept the 18/21, and checked the fix on a second set of replies it had not seen |
 | Guardrails | On real drafts they blocked 2 of 41 good replies (**4.9% false positives**: a refusal repeating "50% off", and the "I'm still deciding" misfire). Fixed: **0 of 84 clean drafts blocked** across five samples. A gap in promotion claims was closed too; one unrelated unsupported claim in the same data is still missed. A video rehearsal on 2026-10-15 found a third false positive: a true statement about a discount code that had been verified one turn earlier, blocked because only the current turn counted. Fixed: a code verified earlier in the **same conversation** is trusted, but only when every detail the reply claims (code, percentage, eligibility, validity, expiry date) matches the tool result exactly; a code never verified, a mismatch, or a verification from another conversation still blocks. Replaying every draft on file: **0 of 84 clean drafts blocked, and 0 of the 25 rehearsal drafts** (it was 1 of 25); misses on real violations did not move (1 of 5, the documented product-fact gap) |
-| Video rehearsal | The five typed prompts of the demo video, 5 conversations, on the live model with the knowledge base running (`scripts/video-rehearsal.js`). First run: 1 of 10 critical replies blocked (the false positive above), and the knowledge base was not running, so "still deciding" retrieved nothing. After the fix, with Chroma started the same way `npm run live` does: **0 of 10 critical replies blocked**, and **4 of 5 "still deciding" replies state the real 30-day return window** (the fifth said only "hassle-free returns on eligible items"). One run, 41 model calls, one model on one day |
+| Video rehearsal | The five typed prompts of the demo video, 5 conversations, on the live model with the knowledge base running (`scripts/video-rehearsal.js`). Three runs on 2026-10-15, kept in `docs/results/`: (1) no knowledge base, and one reply blocked by a guardrail false positive; (2) after the guardrail fix, **0 of 10** critical replies blocked but only 4 of 5 "still deciding" replies stated the return window (one said "hassle-free returns on eligible items"); (3) after the hesitation directive was tightened to ask for the retrieved return window, **0 of 10 blocked and 5 of 5 "still deciding" replies state the 30-day window** and the conditions and prepaid label the knowledge base lists. Each run is 41 model calls on one model on one day |
 | Prompt injection | 10 new attempts on the real model, **10/10 held**; the API key appeared in none of the replies |
 | Free tier | **15 generate requests per minute** for this model (read from a real 429); the adapter gives up at once on a long wait instead of holding the reply |
 | Anthropic adapter | **Implemented, not yet run** against the live API |
@@ -185,7 +186,7 @@ server/
   data/kb/               the four knowledge-base documents
   eval/                  the versioned dataset and the prompt sets used for real-model checks
   scripts/               demo, ingest, eval, smoke, guardrail-fp, rate-limit-probe
-  test/                  the test suite (421 tests, 33 files)
+  test/                  the test suite (440 tests, 35 files)
 web/index.html           the demo chat page (no framework, no build step)
 chroma/Dockerfile        a pinned Chroma image, only needed for hosting
 docs/                    ARCHITECTURE.md, TESTING.md, HOSTING.md, images/, results/

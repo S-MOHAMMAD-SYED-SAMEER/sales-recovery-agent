@@ -159,8 +159,11 @@ flowchart LR
   for each pattern (0.65 to 0.85), not learned. The limit is real: it catches direct English phrasing and
   misses paraphrase, sarcasm and other languages.
 - **Current message only**, so a hesitation five turns ago cannot still be steering this reply.
-- **A signal shapes tone and nothing else.** The directive for hesitation says to address likely concerns
-  with the tools and to *never invent or imply a discount*. No directive tells the model to offer anything,
+- **A signal shapes tone and nothing else.** The directive for hesitation says to search the knowledge base for
+  the return policy and state the window exactly as it gives it (never invent, round or estimate one, never
+  describe returns in words the knowledge base does not use), and to *never invent or imply a discount*. The
+  directive names no number itself, so the window can only come from the knowledge base. The first version said
+  only "address likely concerns", and a real reply was once "hassle-free returns on eligible items" with no window. No directive tells the model to offer anything,
   and no signal triggers an email, a CRM update or any action outside the reply.
 - Signals never reach the guardrails and the guardrails never reach the signals: separate modules, separate
   jobs.
