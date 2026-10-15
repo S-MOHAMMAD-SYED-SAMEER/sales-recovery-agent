@@ -40,17 +40,16 @@ export function missingKeyMessage(config) {
   return null;
 }
 
-export async function startStack({ provider, tag }) {
-  process.env.LLM_PROVIDER = provider;
-  const { config } = await import('../../src/config/env.js');
-
-  console.log(describeProvider(config));
-  const problem = missingKeyMessage(config);
-  if (problem) {
-    console.error(`[${tag}] Not starting: ${problem}`);
-    process.exit(1);
-  }
-
+// Makes the knowledge base available the way `npm run demo` / `npm run live` do (steps 2 and 3
+// above): finds Chroma at CHROMA_HOST:CHROMA_PORT or starts a local one, then ingests data/kb/.
+// Shared with scripts/video-rehearsal.js, which must measure the same stack the recording uses.
+//
+// Resolves { ready, url, stop }. `ready` is false when Chroma could not be reached or started;
+// the caller decides what that means (`startStack` carries on without policy answers, as it
+// always has; the rehearsal treats it as an error). `stop()` ends a Chroma this call started and
+// is a no-op for one that was already running. Ingestion failing is reported but is not `ready:
+// false`, because the app re-ingests on demand.
+export async function ensureKnowledgeBase({ config, tag }) {
   const chromaUrl = `${config.chromaSsl ? 'https' : 'http'}://${config.chromaHost}:${config.chromaPort}`;
 
   async function chromaIsUp() {
@@ -119,7 +118,7 @@ export async function startStack({ provider, tag }) {
     return false;
   }
 
-  function stopChroma() {
+  function stop() {
     if (!chroma || chroma.killed) return;
     if (process.platform === 'win32' && chroma.pid) {
       // pip's Windows launcher starts the real server as a child process, and
@@ -130,25 +129,46 @@ export async function startStack({ provider, tag }) {
     }
   }
 
+  // Ctrl-C at any point after this, including during ingestion, stops a Chroma this call started.
   process.on('SIGINT', () => {
-    stopChroma();
+    stop();
     process.exit(0);
   });
   process.on('SIGTERM', () => {
-    stopChroma();
+    stop();
     process.exit(0);
   });
 
-  if (await ensureChroma()) {
+  const ready = await ensureChroma();
+  if (ready) {
     console.log(`[${tag}] Ingesting the knowledge base (the first run downloads a ~90MB embedding model)...`);
     const ingestCode = await run(process.execPath, ['scripts/ingest.js']);
     if (ingestCode !== 0) {
       console.warn(`[${tag}] Ingestion failed — continuing; the app re-ingests on demand when a policy question needs it.`);
     }
   }
+  return { ready, url: chromaUrl, stop };
+}
+
+export async function startStack({ provider, tag }) {
+  process.env.LLM_PROVIDER = provider;
+  const { config } = await import('../../src/config/env.js');
+
+  console.log(describeProvider(config));
+  const problem = missingKeyMessage(config);
+  if (problem) {
+    console.error(`[${tag}] Not starting: ${problem}`);
+    process.exit(1);
+  }
+
+  const knowledgeBase = await ensureKnowledgeBase({ config, tag });
 
   console.log(`[${tag}] Starting the app — open http://localhost:${config.port}`);
-  const appCode = await run(process.execPath, ['src/index.js']);
-  stopChroma();
+  const appCode = await new Promise((resolve) => {
+    const child = spawn(process.execPath, ['src/index.js'], { cwd: serverDir, stdio: 'inherit' });
+    child.on('error', () => resolve(-1));
+    child.on('exit', (code) => resolve(code ?? 1));
+  });
+  knowledgeBase.stop();
   process.exit(appCode);
 }

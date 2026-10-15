@@ -19,20 +19,32 @@ const ALL_TOOLS = [...businessTools, searchKnowledgeBase];
 const toolDefinitions = getToolDefinitions(ALL_TOOLS);
 const executeTool = createToolExecutor(ALL_TOOLS);
 
-// Returns { text, toolsUsed }. toolsUsed lists every tool name the agent
+// Returns { text, toolsUsed, toolResults }. toolsUsed lists every tool name the agent
 // dispatched while producing this reply (in order, may repeat) — populated
 // even when the underlying provider or a specific call declined every tool.
-export function generateReply({ systemPrompt, messages }) {
+// toolResults has one { name, args, outcome } per dispatch, outcome being what the tool
+// executor returned ({ ok, result } or { ok: false, error }): the record the guardrails
+// use for a code verified in this turn and kept for the rest of the conversation. It is
+// captured here, around the executor, so no provider or the tool loop has to know.
+export async function generateReply({ systemPrompt, messages }) {
   const provider = PROVIDERS[config.llmProvider];
 
   if (!provider) {
-    return Promise.reject(new Error(`Unknown LLM_PROVIDER "${config.llmProvider}".`));
+    throw new Error(`Unknown LLM_PROVIDER "${config.llmProvider}".`);
   }
 
-  return provider.generateReply({
+  const toolResults = [];
+  const recordingExecutor = async (name, args) => {
+    const outcome = await executeTool(name, args);
+    toolResults.push({ name, args, outcome });
+    return outcome;
+  };
+
+  const reply = await provider.generateReply({
     systemPrompt,
     messages,
     tools: toolDefinitions,
-    executeTool,
+    executeTool: recordingExecutor,
   });
+  return { ...reply, toolResults };
 }

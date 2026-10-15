@@ -25,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateDataset } from '../src/eval/schema.js';
 import { validateReply } from '../src/guardrails/index.js';
+import { execute as checkDiscount } from '../src/tools/checkDiscount.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATASET_PATH = path.resolve(__dirname, '../eval/dataset.json');
@@ -142,13 +143,47 @@ function pct(n, d) {
   return d === 0 ? 'n/a' : `${((n / d) * 100).toFixed(1)}% (${n}/${d})`;
 }
 
+// A video-rehearsal file is a list of `rows` (take, step, draft, ...) where each take is ONE conversation,
+// not a list of independent prompts. For those, a draft is replayed with the discount checks made on
+// earlier turns of the same take, as the app now does. Rows saved by the current script carry the exact
+// tool results (`discountResults`); older files do not, so for those the check is re-made with the real
+// tool for the code in the earlier message, on the day the file was recorded (WELCOME10's expiry is
+// relative to the day).
+function fromRehearsal(saved) {
+  const recordedAt = new Date(saved.meta?.date ?? Date.now());
+  const earlier = new Map();
+  const derived = [];
+  const prompts = saved.rows.map((row) => {
+    const conversation = row.take;
+    const before = earlier.get(conversation) ?? [];
+    let results = row.discountResults;
+    if (!results && Array.isArray(row.toolsUsed) && row.toolsUsed.includes('checkDiscount')) {
+      const code = /\b([A-Za-z]{3,10}\d{1,3})\b/.exec(row.message ?? '')?.[1];
+      results = code ? [checkDiscount({ code }, { now: () => recordedAt })] : [];
+      derived.push(`${conversation}-${row.step}`);
+    }
+    earlier.set(conversation, [...before, ...(results ?? [])]);
+    return {
+      id: `take${row.take}-${row.step}`,
+      set: 'video-rehearsal',
+      status: row.status,
+      draft: row.draft,
+      toolsUsed: row.toolsUsed,
+      violations: row.violations ?? [],
+      verifiedDiscounts: before,
+    };
+  });
+  return { ...saved, prompts, derivedDiscountResults: derived };
+}
+
 function runAnalyze() {
-  const saved = JSON.parse(fs.readFileSync(path.resolve(analyzeArg.slice('--analyze='.length)), 'utf-8'));
+  const loaded = JSON.parse(fs.readFileSync(path.resolve(analyzeArg.slice('--analyze='.length)), 'utf-8'));
+  const saved = loaded.prompts ? loaded : fromRehearsal(loaded);
   const labels = labelsArg ? JSON.parse(fs.readFileSync(path.resolve(labelsArg.slice('--labels='.length)), 'utf-8')) : null;
   const answered = saved.prompts.filter((p) => p.status === 200);
 
   const rows = answered.map((p) => {
-    const now = validateReply({ reply: p.draft, toolsUsed: p.toolsUsed });
+    const now = validateReply({ reply: p.draft, toolsUsed: p.toolsUsed, verifiedDiscounts: p.verifiedDiscounts ?? [] });
     return {
       id: p.id,
       set: p.set,
@@ -175,6 +210,9 @@ function runAnalyze() {
     return out;
   };
 
+  if (saved.derivedDiscountResults?.length) {
+    console.log(`(Earlier discount checks re-made with the real tool for: ${saved.derivedDiscountResults.join(', ')}.)`);
+  }
   const result = { source: path.basename(analyzeArg.slice('--analyze='.length)), model: saved.meta?.model, atCapture: summarize('blockedAtCapture'), withCurrentGuardrails: summarize('blockedNow'), rows };
   console.log(`Drafts: ${rows.length} answered of ${saved.prompts.length}.`);
   for (const [label, key] of [['At capture (guardrails as they were)', 'atCapture'], ['Current guardrails', 'withCurrentGuardrails']]) {

@@ -94,6 +94,16 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     console.error('[chat] Failed to load conversation history:', err.message);
   }
 
+  // Codes checkDiscount verified on EARLIER turns of this conversation (never another one), so a
+  // true statement about one is not mistaken for an unverified claim. Same degradation rule as
+  // history: if they cannot be read, the guardrails simply see none and are stricter.
+  let verifiedDiscounts = [];
+  try {
+    verifiedDiscounts = conversationStore.getVerifiedDiscounts?.(sessionId) ?? [];
+  } catch (err) {
+    console.error('[chat] Failed to load verified discounts:', err.message);
+  }
+
   // Signal detection is scoped to this one message (see signals/index.js
   // for why) and only ever shapes *this* turn's system prompt — it cannot
   // trigger any action outside this response.
@@ -102,6 +112,7 @@ export async function handleChat({ sessionId, message }, deps = {}) {
 
   let text;
   let toolsUsed;
+  let toolResults = [];
   let usage = null;
   try {
     const result = await generateReply({
@@ -118,6 +129,7 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     }
     text = result.text;
     toolsUsed = result.toolsUsed || [];
+    toolResults = Array.isArray(result.toolResults) ? result.toolResults : [];
     usage = result.usage ?? null;
   } catch (err) {
     console.error('[chat] LLM provider error:', err);
@@ -127,7 +139,7 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     };
   }
 
-  const guardrailResult = validateReply({ reply: text, toolsUsed });
+  const guardrailResult = validateReply({ reply: text, toolsUsed, verifiedDiscounts });
   if (!guardrailResult.safe) {
     // Always the policy and what matched: enough to tell a right block from a wrong one.
     for (const v of guardrailResult.violations) {
@@ -157,6 +169,17 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     console.error('[chat] Failed to persist conversation history:', err.message);
   }
 
+  // What checkDiscount returned this turn is a fact about the store, whatever happened to the
+  // reply, so it is kept against this conversation for the turns that follow. Only a successful
+  // tool result is kept, and it comes from the executor, not from anything the model wrote.
+  try {
+    for (const { name, outcome } of toolResults) {
+      if (name === 'checkDiscount' && outcome?.ok) conversationStore.saveVerifiedDiscount?.(sessionId, outcome.result);
+    }
+  } catch (err) {
+    console.error('[chat] Failed to persist verified discounts:', err.message);
+  }
+
   // Token counts and latency for this reply, when the provider reported them
   // (the demo provider makes no model call). Numbers only. Returned beside the
   // body, not in it: the API response the page reads is unchanged.
@@ -177,7 +200,9 @@ export async function handleChat({ sessionId, message }, deps = {}) {
     draft: text,
   };
 
-  return { status: 200, body: { reply: finalReply, toolsUsed, signals }, usage, guardrail };
+  // What each tool returned this turn, beside the body like `usage` and `guardrail`: for scripts that
+  // need to know, for example, that the knowledge base answered. Never sent to the client.
+  return { status: 200, body: { reply: finalReply, toolsUsed, signals }, usage, guardrail, toolResults };
 }
 
 router.post('/chat', async (req, res) => {

@@ -18,6 +18,20 @@ const SCHEMA = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+
+  -- What checkDiscount returned for a code in this conversation, exactly as the tool returned it.
+  -- Written only by the server from a tool result, never from model text or the customer's message;
+  -- read back per conversation so the guardrails can allow a true statement about a code that was
+  -- verified on an earlier turn (and nothing about one verified in another conversation).
+  CREATE TABLE IF NOT EXISTS verified_discounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id),
+    code TEXT NOT NULL,
+    result TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_verified_discounts_conversation_id ON verified_discounts(conversation_id);
 `;
 
 // dbPath === ':memory:' is used by tests for a fresh, isolated, on-disk-free database.
