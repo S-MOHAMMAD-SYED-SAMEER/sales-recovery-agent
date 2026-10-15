@@ -12,7 +12,7 @@ is edited by hand.
 | `YYYY-MM-DD-eval-regrade-<model>-dataset-<v>.json` | `node scripts/eval.js --regrade=<file> --record` | The saved replies of an earlier run graded again by the current dataset and grader. No model is called, and the replies are unchanged |
 | `YYYY-MM-DD-judge-<model>-dataset-<v>.json` | `eval.js --judge-from=<file> --record` | The LLM judge's verdict on each saved reply. Subjective; not part of any score |
 | `YYYY-MM-DD-guardrail-drafts-<model>.json` | `guardrail-fp.js --capture --record` | Every dataset case and benign prompt run on the real model, with the model's DRAFT, the policies that fired and the final reply |
-| `YYYY-MM-DD-guardrail-labels*.json` | one AI reviewer (Claude Code) | For each draft, whether it actually broke a rule, with the reason. Not independent, not human-verified (`labelledBy` in each file says so) |
+| `YYYY-MM-DD-guardrail-labels*.json` | AI-labelled by one reviewer (Claude Code); a sample of 20 checked by Sameer: agreed with 19, relabelled 1 | For each draft, whether it actually broke a rule, with the reason (`labelledBy` in each file says who; `unsupported-refund-request-001` carries the relabel and the old label) |
 | `YYYY-MM-DD-guardrail-analysis-<model>*.json` | `guardrail-fp.js --analyze --record` | False-positive and false-negative rates of the guardrails against the labels, before and after a change |
 | `YYYY-MM-DD-rate-limit-probe-<model>.json` | `rate-limit-probe.js --record` | A controlled burst: what the free tier did and what the adapter did about it |
 | `YYYY-MM-DD-injection-run-<model>.json`, `*-injection-review.json` | `guardrail-fp.js --capture --prompts=eval/injection-prompts.json --name=injection-run` | Ten injection attempts on the real model, and a hand verdict on each |
@@ -22,10 +22,18 @@ is edited by hand.
 | `YYYY-MM-DD-video-rehearsal-<model>*.json` | `GUARDRAIL_LOG_DRAFTS=true node scripts/video-rehearsal.js --runs=5 --record` | The five typed prompts of the demo video, played in order in 5 fresh conversations: for each reply the model's draft, every block (policy, rule, matched phrase, clause), the final reply, tools and signals. The pass condition for recording is no block on "50% off" and "still deciding" |
 | `YYYY-MM-DD-ui-rehearsal-<model>.json` | `node scripts/video-rehearsal.js --runs=1 --record --max-calls=10 --name=ui-rehearsal` | One take of the five video prompts with each reply's whole `trace` kept, and the check that every trace agrees with what the same turn did (tools, signals, model calls, guardrail verdict) |
 | `ui-YYYY-MM-DD/` | `screenshots.mjs`, `headless-check.mjs` in that folder | Screenshots of the chat page (desktop light, desktop dark with the Operator view, 375 px) made from the recorded replies of the rehearsal above, and the one-off browser check |
-| `YYYY-MM-DD-video-rehearsal-labels.json` | one AI reviewer (Claude Code) | A label for each of the 25 drafts in a rehearsal file (all clean) |
+| `YYYY-MM-DD-video-rehearsal-labels.json` | AI-labelled by one reviewer (Claude Code) | A label for each of the 25 drafts in a rehearsal file (all clean) |
 | `YYYY-MM-DD-cross-turn-fix-analysis-set1..6-<model>.json` | `guardrail-fp.js --analyze --record` | The current guardrails replayed over every draft on file after the same-conversation discount change: sets 1 to 5 are the earlier samples, set 6 the rehearsal (replayed with the earlier turns' verifications) |
 | `YYYY-MM-DD-hesitation-fix-analysis-rehearsal<N>-<model>.json`, `YYYY-MM-DD-video-rehearsal-<N>-labels.json` | `guardrail-fp.js --analyze --record`, and the AI reviewer | The current guardrails replayed over the second and third rehearsal's 25 drafts each, and the labels (the second has one unsupported "hassle-free" claim that no guardrail covers) |
 | `YYYY-MM-DD-summary.md` | written up after the runs | What the runs of that day add up to |
 
 Mock-mode evaluation output is **not** kept here: it replays scripted answers and says nothing
 about a model.
+
+## Note on the 2026-10-15 relabel
+
+One label was changed after a spot check (`unsupported-refund-request-001`, set 1: clean -> violation, rule `other`). The recorded
+`*guardrail-analysis*`, `*promotion-fix-analysis*`, `*cross-turn-fix-analysis*` and `*hesitation-fix-analysis*` files were computed
+before it and are left as they were (in them set 1 is 2/41 with no violating draft). To recompute against the current labels, run
+`node scripts/guardrail-fp.js --analyze=<drafts.json> --labels=<labels.json>`. The current figures are in
+`2026-10-15-summary.md`, section 10.

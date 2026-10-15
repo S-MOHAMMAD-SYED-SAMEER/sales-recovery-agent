@@ -2,7 +2,7 @@
 
 ```
 cd server
-npm test            # 529 tests in 40 files, about 10 seconds
+npm test            # 530 tests in 40 files, about 10 seconds
 npm run eval        # the mock evaluation: 21/21
 ```
 
@@ -25,7 +25,7 @@ their date, model and dataset version instead of being asserted in tests.
 | **HTTP layer** (`app.test.js`) | 13 | The only tests that start the real Express app. They cover what no other test reaches: the 16 KB body limit and its JSON 413 (it used to return an HTML page with a stack trace and file paths), malformed JSON, the missing `X-Powered-By`, the rate limiter's wiring, and a generic 500 that leaks nothing |
 | **The turn** (`chat.route`, `chat.demoProvider.integration`, `clientFacingCopy`) | 55 | `handleChat` end to end with a stub model: validation, history, memory isolation between sessions, signals in the prompt, guardrail blocking and what is persisted, an empty model reply, usage logging. `clientFacingCopy` checks that nothing a customer can read names a provider, a variable or a file |
 | **Business tools** (`tools`) | 22 | Deterministic mock data, argument validation, a dispatcher that never throws, whole-word stock matching, expiry-aware discounts on a pinned clock, no "found" for `constructor` |
-| **Guardrails** (`guardrails`, `guardrail.measurement`) | 35 | A violating and a safe case for each of the eight policies; claim versus mention; and a test that reads every real draft kept in `docs/results/` and checks the policy against the AI reviewer's label on it (not human-verified) |
+| **Guardrails** (`guardrails`, `guardrail.measurement`) | 36 | A violating and a safe case for each of the eight policies; claim versus mention; and a test that reads every real draft kept in `docs/results/` and checks the policy against its label (AI-labelled by one reviewer (Claude Code); a sample of 20 checked by Sameer: agreed with 19, relabelled 1) |
 | **Discounts verified earlier in the conversation** (`guardrails.verifiedDiscounts`) | 17 | A true statement about a code checked on an earlier turn is allowed, and only then: never-verified codes, claims that name no code, every kind of mismatch (percentage, eligibility, money amount, expiry date, validity both ways) and a verification made in another conversation all still block. Records are the real tool's output. The reply blocked in the 2026-10-15 rehearsal is a regression test (allowed with the earlier check, blocked without), end to end through `handleChat`, including that a customer cannot plant a verification and that a store without the new methods falls back to the stricter behaviour |
 | **The rehearsal script** (`scripts.rehearsal`) | 13 | Without a model: a knowledge-base failure of any kind is an error, the return window is read from the policy file and a reply either states it or does not, the pass condition (including that a stopped run never passes), and that the script refuses to start, with no model call, when Chroma is not there |
 | **The chat page** (`web.chatPage`) | 19 | How a reply is drawn (inline code, bold and bullets from text nodes, never HTML: the stand-in document throws if `innerHTML` is touched, and five injection strings stay text), that every `innerHTML` in the page is a literal, that `/format.js` and `/api/mode` are served, and the header tag (`Live · <model>` only for a configured real provider, never the key, `Demo` for anything else); and the cold-start notice setting: the server reports it only when the parsed flag is true, the page shows it only for the first message and only then, any unreadable answer means no notice, and the flag is documented in HOSTING.md, the README and `.env.example`. Also checked once in headless Chrome |
@@ -56,8 +56,8 @@ their date, model and dataset version instead of being asserted in tests.
    for 20% off"` and `"I can check and it is in stock"` must still be blocked. A guardrail that never blocks
    would also have no false positives; this test is what stops the fix from being that.
 4. **`every recorded real draft is blocked if and only if it was labelled as breaking a rule`**
-   (`guardrails`). Reads the five sets of real model drafts in `docs/results/` with their labels. The labels were
-   made by one AI reviewer (Claude Code), with a reason recorded for each; not independent and not human-verified. If a future
+   (`guardrails`). Reads the five sets of real model drafts in `docs/results/` with their labels. The labels are
+   AI-labelled by one reviewer (Claude Code); a sample of 20 checked by Sameer: agreed with 19, relabelled 1. If a future
    change to a regex blocks a draft the reviewer had judged fine, or unblocks one judged bad, this fails and names
    the draft.
 5. **`a 429 that asks for a long wait fails straight away instead of holding the customer`** (`llm.gemini`). A
@@ -134,15 +134,15 @@ labels, for free.
 
 | What | Result |
 |---|---|
-| First capture, 41 drafts | 2 blocked, **both false positives (4.9%)**: a refusal that repeated "50% off", and an offer to "check if something is in stock" (the "I'm still deciding" misfire) |
-| After that fix | 0/41; 0/13 on 15 new held-out prompts |
+| First capture, 41 drafts (40 clean) | 2 blocked, **both false positives (5.0% of the 40 clean)**: a refusal that repeated "50% off", and an offer to "check if something is in stock" (the "I'm still deciding" misfire) |
+| After that fix | 0/40 clean; 0/13 on 15 new held-out prompts |
 | Held-out set also showed | 2 of 2 unsupported promotion claims missed |
 | First promotion fix, on 12 fresh prompts | **6 of 11 answered drafts blocked, five of them honest "I don't have information" answers** (50% false positives): a fix designed from two examples fitted them and failed on new data |
 | Revised (who is speaking about what), second fresh set | 0/10 false positives, one new in-scope miss ("promotional codes"), then fixed |
-| Final, all 89 answered drafts on file | **0 of 84 clean drafts blocked; 0 of 4 promotion claims missed; 1 of 5 violations of any kind missed** (an unsupported fact about how items are sold, not a promotion) |
+| Final, all 89 answered drafts on file | **0 of 83 clean drafts blocked; 0 of 4 promotion claims missed; 2 of 6 violations of any kind missed** (an unsupported fact about how items are sold, and an offer to start a claim from a photo the chat cannot receive; neither is a promotion) |
 
 Full account: [`docs/results/2026-10-13-promotion-gap.md`](./results/2026-10-13-promotion-gap.md). Labels are
-one AI reviewer (Claude Code), with a reason recorded for each; not independent and not human-verified. The honest summary is that a pattern-based guardrail is only
+AI-labelled by one reviewer (Claude Code); a sample of 20 checked by Sameer: agreed with 19, relabelled 1 (the relabelled draft is `unsupported-refund-request-001`, which promised help the chat cannot give). The honest summary is that a pattern-based guardrail is only
 as good as the drafts it has been tried on, and every round of new real drafts found something.
 
 ## Free-tier and injection checks
@@ -160,9 +160,11 @@ as good as the drafts it has been tried on, and every round of new real drafts f
 
 ## What the guardrails do and do not cover
 
-Guardrails enforce discount, stock, order-status and promotion claims in code. Other product-fact claims (how items are sold, materials, dimensions and so on) rely on retrieval grounding, not on a code check. Planned for v1.1: claim verification against the knowledge base. That is the scope behind the "1 of 5 violations of any kind missed" in the table above: the
-missed draft stated a product fact ("We currently sell all our items individually") that no tool or document
-supports, which is a claim category the code does not check.
+Guardrails enforce discount, stock, order-status and promotion claims in code. Other product-fact claims (how items are sold, materials, dimensions and so on) rely on retrieval grounding, not on a code check. Planned for v1.1: claim verification against the knowledge base. That is the scope behind the "2 of 6 violations of any kind missed" in the table above. One missed draft stated a
+product fact ("We currently sell all our items individually") that no tool or document supports. The other, found in a
+spot check and relabelled on 2026-10-15, told a customer to "share your order number and a photo" so it could "help get
+this process started", which the chat cannot do: it cannot receive photos or start a claim, and the policy says to email
+support. The code checks refund promises, not other promised capabilities. Neither is a claim category the code checks.
 
 ## The page in a real browser (once, not part of `npm test`)
 

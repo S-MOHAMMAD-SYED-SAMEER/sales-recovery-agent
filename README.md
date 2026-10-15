@@ -45,13 +45,13 @@ below can be re-derived from those files.
 
 | | Result |
 |---|---|
-| Tests | **529 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
+| Tests | **530 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
 | Mock evaluation | **21/21**. It replays scripted answers, so it checks the code around the model, **not a model** |
 | **Real evaluation, run 1** (the 21 cases) | **18/21 (85.7%)** |
 | **Real evaluation, fresh run** (21 new replies) | **21/21**: tool selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10 |
 | Real evaluation, re-run after the hesitation directive changed | **21/21** again (36 model calls): tool selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10, hallucination 0/18 |
 | Why they differ | Run 1's three misses were **correct replies the grader scored wrongly** ("30-day" against a keyword "30 days"; "I'm not finding any information" not recognised as honest; a correct denial quoting "90-day" tripping a forbidden string). I fixed the grader, kept the 18/21, and checked the fix on a second set of replies it had not seen |
-| Guardrails | On real drafts they blocked 2 of 41 good replies (**4.9% false positives**: a refusal repeating "50% off", and the "I'm still deciding" misfire). Fixed: **0 of 84 clean drafts blocked** across five samples. A gap in promotion claims was closed too; one unrelated unsupported claim in the same data is still missed. A video rehearsal on 2026-10-15 found a third false positive: a true statement about a discount code that had been verified one turn earlier, blocked because only the current turn counted. Fixed: a code verified earlier in the **same conversation** is trusted, but only when every detail the reply claims (code, percentage, eligibility, validity, expiry date) matches the tool result exactly; a code never verified, a mismatch, or a verification from another conversation still blocks. Replaying every draft on file: **0 of 84 clean drafts blocked, and 0 of the 25 rehearsal drafts** (it was 1 of 25); misses on real violations did not move (1 of 5, the documented product-fact gap) |
+| Guardrails | On real drafts (AI-labelled by one reviewer (Claude Code); a sample of 20 checked by Sameer: agreed with 19, relabelled 1) they blocked 2 of 40 clean drafts (**5.0% false positives**: a refusal repeating "50% off", and the "I'm still deciding" misfire). Fixed: **0 of 83 clean drafts blocked** across five samples. A gap in promotion claims was closed too; two unsupported claims of kinds the guardrails don't check (a store fact and a promised capability) still get through (see the limits below). A video rehearsal on 2026-10-15 found a third false positive: a true statement about a discount code that had been verified one turn earlier, blocked because only the current turn counted. Fixed: a code verified earlier in the **same conversation** is trusted, but only when every detail the reply claims (code, percentage, eligibility, validity, expiry date) matches the tool result exactly; a code never verified, a mismatch, or a verification from another conversation still blocks. Replaying every draft on file: **0 of 83 clean drafts blocked, and 0 of the 25 rehearsal drafts** (it was 1 of 25); misses on real violations: 2 of 6 (the documented product-fact gap, and a reply that offered to start a damage claim from a photo the chat cannot receive, found in a spot check) |
 | Video rehearsal | The five typed prompts of the demo video, 5 conversations, on the live model with the knowledge base running (`scripts/video-rehearsal.js`). Three runs on 2026-10-15, kept in `docs/results/`: (1) no knowledge base, and one reply blocked by a guardrail false positive; (2) after the guardrail fix, **0 of 10** critical replies blocked but only 4 of 5 "still deciding" replies stated the return window (one said "hassle-free returns on eligible items"); (3) after the hesitation directive was tightened to ask for the retrieved return window, **0 of 10 blocked and 5 of 5 "still deciding" replies state the 30-day window** and the conditions and prepaid label the knowledge base lists. Each run is 41 model calls on one model on one day |
 | Agent UI (2026-10-15) | One real rehearsal with the per-turn trace on (`docs/results/2026-10-15-ui-rehearsal-*.json`): 8 model requests, 0 of 5 replies blocked, the "still deciding" reply states the 30-day window, and **5 of 5 traces agree** with what the same turn did. Screenshots in `docs/results/ui-2026-10-15/`. One take, one model, one day |
 | Prompt injection | 10 new attempts on the real model, **10/10 held**; the API key appeared in none of the replies |
@@ -230,7 +230,7 @@ server/
   data/kb/               the four knowledge-base documents
   eval/                  the versioned dataset and the prompt sets used for real-model checks
   scripts/               demo, ingest, eval, smoke, guardrail-fp, rate-limit-probe
-  test/                  the test suite (529 tests, 40 files)
+  test/                  the test suite (530 tests, 40 files)
 web/                     the demo chat page: index.html, styles.css, app.js, trace.js, session.js, format.js
                          (no framework, no build step, no script that parses HTML)
 chroma/Dockerfile        a pinned Chroma image, only needed for hosting
@@ -246,8 +246,10 @@ PROJECT-1.md             the case-study write-up
   can help.
 - **What the guardrails cover.** They enforce discount, stock, order-status and promotion claims in code. Other
   product-fact claims (how items are sold, materials, dimensions and so on) rely on retrieval grounding, not on a
-  code check: in the recorded data one such claim ("we currently sell all our items individually") got through.
-  Planned for v1.1: claim verification against the knowledge base.
+  code check, and neither does the code check promised capabilities (it checks refund promises only). In the
+  recorded data two claims of those kinds got through: "we currently sell all our items individually" (a store fact)
+  and an offer to "help get this process started" from a photo, which the chat cannot receive or act on (a promised
+  capability, found in a spot check). Planned for v1.1: claim verification against the knowledge base.
 - Signal detection and guardrails are regex patterns over English text. They catch the shapes they were built
   for; every round of fresh real drafts found another.
 - The `demo` provider is not a model. It understands a fixed set of questions and answers anything
