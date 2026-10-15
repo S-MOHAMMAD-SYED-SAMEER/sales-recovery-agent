@@ -4,7 +4,7 @@ import express from 'express';
 import { config } from './config/env.js';
 import defaultChatRouter from './routes/chat.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
-import { describeMode } from './routes/mode.js';
+import { describeMode, describeUi } from './routes/mode.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDir = path.resolve(__dirname, '../../web');
@@ -47,7 +47,7 @@ export function createApp({
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   // Which kind of model answers, for the page's header tag. Provider and model name only.
-  app.get('/api/mode', (req, res) => res.json(describeMode()));
+  app.get('/api/mode', (req, res) => res.json({ ...describeMode(), ...describeUi() }));
   // Scoped to /api/chat only — /api/health above is registered first and is
   // never routed through this, by construction, not by an exclusion check.
   app.use('/api/chat', rateLimiter);

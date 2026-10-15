@@ -132,3 +132,14 @@ test('guardrailLogDrafts is off by default and on only for "true"', async () => 
     assert.equal((await loadConfig({ GUARDRAIL_LOG_DRAFTS: value })).guardrailLogDrafts, false, value);
   }
 });
+
+test('showColdStartNotice is off by default and on only for "true"', async () => {
+  assert.equal((await loadConfig({ SHOW_COLD_START_NOTICE: undefined })).showColdStartNotice, false);
+  assert.equal((await loadConfig({ SHOW_COLD_START_NOTICE: '' })).showColdStartNotice, false);
+  for (const value of ['true', 'TRUE', ' true ']) {
+    assert.equal((await loadConfig({ SHOW_COLD_START_NOTICE: value })).showColdStartNotice, true, value);
+  }
+  for (const value of ['false', '1', 'yes', 'on']) {
+    assert.equal((await loadConfig({ SHOW_COLD_START_NOTICE: value })).showColdStartNotice, false, value);
+  }
+});

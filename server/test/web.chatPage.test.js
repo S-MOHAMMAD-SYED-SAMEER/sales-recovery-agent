@@ -209,7 +209,8 @@ test('/api/mode is served by the app and reports the demo provider under the tes
   const response = await fetch(`http://127.0.0.1:${server.address().port}/api/mode`);
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.deepEqual(Object.keys(body).sort(), ['live', 'model', 'provider']);
+  assert.deepEqual(Object.keys(body).sort(), ['coldStartNotice', 'live', 'model', 'provider']);
+  assert.equal(body.coldStartNotice, false, 'off unless SHOW_COLD_START_NOTICE=true');
   assert.equal(typeof body.live, 'boolean');
 });
 
@@ -238,4 +239,45 @@ test('the page shows "Live · <model>" only from a live answer, and keeps Demo o
   const app = fs.readFileSync(path.join(webDir, 'app.js'), 'utf8');
   assert.match(app, /tag\.textContent = mode\.text;/);
   assert.match(app, /fetch\('\/api\/mode'\)/);
+});
+
+// --- the cold-start notice: a hosting message, shown only when the flag is on --------------------------------------
+
+test('the server reports the notice setting: on only when config says exactly true', async () => {
+  const { describeUi } = await import('../src/routes/mode.js');
+  assert.deepEqual(describeUi({ showColdStartNotice: true }), { coldStartNotice: true });
+  assert.deepEqual(describeUi({ showColdStartNotice: false }), { coldStartNotice: false });
+  assert.deepEqual(describeUi({}), { coldStartNotice: false });
+  assert.deepEqual(describeUi({ showColdStartNotice: 'true' }), { coldStartNotice: false }, 'a string is not the parsed flag');
+});
+
+test('the page shows the notice only for the first message, and only when the server says the flag is on', () => {
+  const on = { coldStartNotice: true };
+  const off = { coldStartNotice: false };
+  // flag ON: shown for the first message of a page load, not for later ones
+  assert.equal(SraFormat.shouldShowColdStartNotice(on, false), true);
+  assert.equal(SraFormat.shouldShowColdStartNotice(on, true), false);
+  // flag OFF (the default, and any local run): never
+  assert.equal(SraFormat.shouldShowColdStartNotice(off, false), false);
+  assert.equal(SraFormat.shouldShowColdStartNotice(off, true), false);
+  // an answer that never came, or an older server without the field: never
+  for (const info of [null, undefined, {}, { coldStartNotice: 'true' }, { coldStartNotice: 1 }, 'on']) {
+    assert.equal(SraFormat.shouldShowColdStartNotice(info, false), false, JSON.stringify(info));
+  }
+});
+
+test('the page decides through that helper and starts with no notice until /api/mode answers', () => {
+  const code = fs.readFileSync(path.join(webDir, 'app.js'), 'utf8');
+  assert.match(code, /let modeInfo = null;/);
+  assert.match(code, /if \(!SraFormat\.shouldShowColdStartNotice\(modeInfo, firstMessageDone\)\) return;/);
+  assert.match(code, /modeInfo = info;/);
+});
+
+test('the flag is documented where a host owner looks: HOSTING.md, the README table and .env.example', () => {
+  const root = path.resolve(webDir, '..');
+  const hosting = fs.readFileSync(path.join(root, 'docs/HOSTING.md'), 'utf8');
+  assert.match(hosting, /SHOW_COLD_START_NOTICE=true/);
+  assert.match(hosting, /off\s+by default/);
+  assert.match(fs.readFileSync(path.join(root, 'README.md'), 'utf8'), /\| `SHOW_COLD_START_NOTICE` \| off \|/);
+  assert.match(fs.readFileSync(path.join(root, 'server/.env.example'), 'utf8'), /^SHOW_COLD_START_NOTICE=$/m);
 });

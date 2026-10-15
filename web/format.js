@@ -104,5 +104,12 @@
     return { live: false, text: null };
   }
 
-  return { parseInline, parseReply, renderReply, plainText, modeLabel };
+  // Whether to show the "waking up" notice for a slow first reply. Only when the server says so (SHOW_COLD_START_NOTICE),
+  // and only for the first message of a page load. Anything else, including an answer that could not be read, means no
+  // notice: it is a hosting message and would be untrue on a local run.
+  function shouldShowColdStartNotice(info, firstMessageDone) {
+    return Boolean(info) && info.coldStartNotice === true && !firstMessageDone;
+  }
+
+  return { parseInline, parseReply, renderReply, plainText, modeLabel, shouldShowColdStartNotice };
 });

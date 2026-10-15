@@ -263,8 +263,11 @@
   let wakeNoticeTimer = null;
   let wakeNoticeEl = null;
 
+  // Set from /api/mode: false until the server says the notice applies (see SHOW_COLD_START_NOTICE).
+  let modeInfo = null;
+
   function startWakeNotice() {
-    if (firstMessageDone) return;
+    if (!SraFormat.shouldShowColdStartNotice(modeInfo, firstMessageDone)) return;
     wakeNoticeTimer = setTimeout(() => {
       hideEmptyState();
       wakeNoticeEl = make('div', 'turn system');
@@ -418,7 +421,9 @@
     try {
       const res = await fetch('/api/mode');
       if (!res.ok) return;
-      const mode = SraFormat.modeLabel(await res.json());
+      const info = await res.json();
+      modeInfo = info;
+      const mode = SraFormat.modeLabel(info);
       const tag = document.getElementById('mode-tag');
       if (mode.live && tag) {
         tag.textContent = mode.text;

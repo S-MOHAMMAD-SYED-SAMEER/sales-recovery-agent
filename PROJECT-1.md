@@ -136,7 +136,7 @@ provider, with tokens and latency recorded per case).
 
 Measured directly, and recorded in `docs/results/` (see its `2026-10-13-summary.md`):
 
-- **522** automated tests, all passing, offline (no key, no Chroma, no network).
+- **529** automated tests, all passing, offline (no key, no Chroma, no network).
 - **Mock evaluation: 21/21.** A mock run replays scripted answers, so this is a regression check on the
   harness and the surrounding code. It is not a measurement of a model.
 - **Real evaluation, `gemini-3.5-flash-lite`, 2026-10-13, two independent runs of the 21 cases.**

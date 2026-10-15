@@ -45,7 +45,7 @@ below can be re-derived from those files.
 
 | | Result |
 |---|---|
-| Tests | **522 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
+| Tests | **529 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
 | Mock evaluation | **21/21**. It replays scripted answers, so it checks the code around the model, **not a model** |
 | **Real evaluation, run 1** (the 21 cases) | **18/21 (85.7%)** |
 | **Real evaluation, fresh run** (21 new replies) | **21/21**: tool selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10 |
@@ -168,6 +168,7 @@ Copy `server/.env.example` to `server/.env`. Every variable is optional with the
 | `KB_DIR` | `server/data/kb` | |
 | `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS` | `30`, `60000` | Per client IP, `POST /api/chat` only |
 | `GUARDRAIL_LOG_DRAFTS` | off | `true` also logs the whole draft of a blocked reply. The policy and matched phrase are always logged |
+| `SHOW_COLD_START_NOTICE` | off | `true` shows "Waking up the support assistant" when the first reply of a page load is slow. For a hosted service that sleeps when idle ([docs/HOSTING.md](./docs/HOSTING.md)); false for any local run |
 | `EVAL_DELAY_MS` | `8000` | Pause between cases and judge calls in `eval:real` |
 
 `POST /api/chat` takes `{ sessionId, message }` (`sessionId`: 1-64 characters of letters, digits,
@@ -211,7 +212,7 @@ server/
   data/kb/               the four knowledge-base documents
   eval/                  the versioned dataset and the prompt sets used for real-model checks
   scripts/               demo, ingest, eval, smoke, guardrail-fp, rate-limit-probe
-  test/                  the test suite (522 tests, 40 files)
+  test/                  the test suite (529 tests, 40 files)
 web/                     the demo chat page: index.html, styles.css, app.js, trace.js, session.js, format.js
                          (no framework, no build step, no script that parses HTML)
 chroma/Dockerfile        a pinned Chroma image, only needed for hosting
