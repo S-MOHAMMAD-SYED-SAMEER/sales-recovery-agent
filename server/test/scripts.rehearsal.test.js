@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { citesReturnWindow, judge, knowledgeBaseProblem, knowledgeBaseUse, returnWindowDays, summarisePrompts, traceProblems } from '../scripts/lib/rehearsal.js';
+import { citesReturnWindow, judge, knowledgeBaseProblem, knowledgeBaseUse, returnWindowDays, summarisePrompts, traceProblems, withinBudget } from '../scripts/lib/rehearsal.js';
 import { generateReply } from '../src/llm/index.js';
 import { runToolLoop } from '../src/llm/toolLoop.js';
 import { businessTools } from '../src/tools/index.js';
@@ -228,4 +228,13 @@ test('each way a trace can disagree with the turn is reported', async () => {
   assert.ok(withTrace((t) => { t.body.trace.steps.push({ type: 'model' }); }).some((p) => /follows the guardrail/.test(p)));
   assert.ok(withTrace((t) => { t.body.trace.steps[0].summary = 'leaked SECRET-KEY-VALUE'; }).some((p) => /secret/.test(p)));
   assert.ok(withTrace((t) => { t.body.trace.totalMs = 'x'; }).some((p) => /totalMs/.test(p)));
+});
+
+test('the request budget: a prompt is sent only if two more model requests still fit, and no budget means no limit', () => {
+  assert.equal(withinBudget(0, 10), true);
+  assert.equal(withinBudget(8, 10), true);
+  assert.equal(withinBudget(9, 10), false);
+  assert.equal(withinBudget(10, 10), false);
+  assert.equal(withinBudget(500, null), true);
+  assert.equal(withinBudget(500, undefined), true);
 });

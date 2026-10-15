@@ -2,7 +2,7 @@
 
 ```
 cd server
-npm test            # 495 tests in 38 files, about 10 seconds
+npm test            # 496 tests in 38 files, about 10 seconds
 npm run eval        # the mock evaluation: 21/21
 ```
 
@@ -27,7 +27,7 @@ their date, model and dataset version instead of being asserted in tests.
 | **Business tools** (`tools`) | 22 | Deterministic mock data, argument validation, a dispatcher that never throws, whole-word stock matching, expiry-aware discounts on a pinned clock, no "found" for `constructor` |
 | **Guardrails** (`guardrails`, `guardrail.measurement`) | 35 | A violating and a safe case for each of the eight policies; claim versus mention; and a test that reads every real draft kept in `docs/results/` and checks the policy against the hand label on it |
 | **Discounts verified earlier in the conversation** (`guardrails.verifiedDiscounts`) | 17 | A true statement about a code checked on an earlier turn is allowed, and only then: never-verified codes, claims that name no code, every kind of mismatch (percentage, eligibility, money amount, expiry date, validity both ways) and a verification made in another conversation all still block. Records are the real tool's output. The reply blocked in the 2026-10-15 rehearsal is a regression test (allowed with the earlier check, blocked without), end to end through `handleChat`, including that a customer cannot plant a verification and that a store without the new methods falls back to the stricter behaviour |
-| **The rehearsal script** (`scripts.rehearsal`) | 12 | Without a model: a knowledge-base failure of any kind is an error, the return window is read from the policy file and a reply either states it or does not, the pass condition (including that a stopped run never passes), and that the script refuses to start, with no model call, when Chroma is not there |
+| **The rehearsal script** (`scripts.rehearsal`) | 13 | Without a model: a knowledge-base failure of any kind is an error, the return window is read from the policy file and a reply either states it or does not, the pass condition (including that a stopped run never passes), and that the script refuses to start, with no model call, when Chroma is not there |
 | **The chat page** (`web.chatPage`) | 15 | How a reply is drawn (inline code, bold and bullets from text nodes, never HTML: the stand-in document throws if `innerHTML` is touched, and five injection strings stay text), that every `innerHTML` in the page is a literal, that `/format.js` and `/api/mode` are served, and the header tag (`Live · <model>` only for a configured real provider, never the key, `Demo` for anything else). Also checked once in headless Chrome |
 | **The per-turn trace** (`trace`) | 17 | The real `handleChat` -> `generateReply` (executor and recorder) -> tool loop -> real tools -> guardrails path, with only the model scripted. The trace of each of the five video scenarios (order 1001, WELCOME10, "50% off", "still deciding", the injection attempt) contains exactly the steps that ran and in the order they ran; a blocked draft shows a `guardrail` step with outcome `block`, its reason and rule while the other policies pass; a model step carries provider, model id, latency and tokens; a retrieval lists file names and chunk ids and none of the passage text; a knowledge base that is down is recorded as unavailable; the demo provider is labelled scripted. Safety: with a fake `GEMINI_API_KEY`, a fake token and a fake environment value set, none appears anywhere in any response body, even when the customer types the key back and the model passes it to a tool; the trace holds no system prompt, no stack trace, no passage text and only whitelisted keys; a tool that throws shows a short failure, not its error; arguments are capped, single-line plain strings; at most 64 steps |
 | **The page's trace views** (`web.trace`) | 15 | Built from the server's own recorder so page and server agree on the shape. The chips (tools, source files, signals) come from the trace, each once, with a fallback for a reply without one that invents no source; the rows an operator reads (*Signal: hesitation*, *Searched knowledge base*, *Called `getOrderStatus`*, *Guardrail: passed*), their details, the guardrail policies as one row with the outcome in words (a check mark or a cross) and not only in colour; and that a customer's words in a trace stay text (the stand-in document throws on `innerHTML`, only div, li, ol, p, span and svg elements are created) |
@@ -161,9 +161,23 @@ Guardrails enforce discount, stock, order-status and promotion claims in code. O
 missed draft stated a product fact ("We currently sell all our items individually") that no tool or document
 supports, which is a claim category the code does not check.
 
+## The page in a real browser (once, not part of `npm test`)
+
+The suite has no browser, so what needs one was checked in headless Chrome with a script kept beside the screenshots
+([`docs/results/ui-2026-10-15/headless-check.mjs`](./results/ui-2026-10-15/)), against the demo provider (it sends
+real messages through the page, so it must never be pointed at `npm run live`). 46 checks pass: no horizontal scroll at
+375, 768, 1000, 1280 and 1440 px; the header tag stays on one line at each width; while a reply is pending the page shows
+one "Working..." line, the input is read-only, the send button and quick-start chips are disabled, and typing shows "Wait for
+the reply..."; chips appear under answers; "View steps" is hidden in the Customer view and reachable by keyboard in the
+Operator view, with a visible focus ring; the panel sits beside the chat at 1000 px (340 wide) and 1440 px (400 wide); a
+blocked draft shows "Guardrail: blocked"; the dark theme applies from the toggle and from the system setting, and the toggle
+reverses it; at 375 px the panel is a bottom sheet that is hidden until asked for, opens on the chosen reply and closes. The
+screenshots and the one real rehearsal with traces are described in
+[`results/ui-2026-10-15/README.md`](./results/ui-2026-10-15/README.md).
+
 ## What is not tested
 
-No browser test of the demo page in the suite. The things that need a real browser were checked once in headless Chrome, outside the suite (see below);  no load test; no retrieval-quality
+No browser test of the demo page in the suite (the browser check above was run once, by hand, and is not repeated by CI);  no load test; no retrieval-quality
 benchmark beyond a handful of questions; the Anthropic adapter is tested against a fake client only and has
 never been run live; the evaluation is 21 cases and 10 attacks on one model on one day, a smoke test and not a
 benchmark.

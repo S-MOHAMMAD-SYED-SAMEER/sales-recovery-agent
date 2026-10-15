@@ -137,3 +137,13 @@ export function traceProblems(turn, { policyNames = [], secrets = [] } = {}) {
   for (const secret of secrets) if (secret && text.includes(secret)) problems.push('the trace contains a secret');
   return problems;
 }
+
+// A hard stop on how many model requests a rehearsal may make. A prompt that needs a tool is two model
+// requests (the call that asks for the tool, and the one that writes the answer); the tool loop allows
+// three, which in practice only a confused model reaches. A prompt is sent only if two more requests
+// still fit, so the budget is honoured unless a prompt takes three.
+export const REQUESTS_PER_PROMPT = 2;
+export function withinBudget(used, max, perPrompt = REQUESTS_PER_PROMPT) {
+  if (max === null || max === undefined) return true;
+  return used + perPrompt <= max;
+}
