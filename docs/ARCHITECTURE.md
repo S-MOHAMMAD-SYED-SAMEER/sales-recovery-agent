@@ -114,7 +114,7 @@ What a step may contain is decided by a whitelist in `src/trace/index.js`, not b
 | `model` | provider, model id, latency in ms, tokens in and out as the adapter reported them (`null` when it did not) |
 | `tool` | the tool name, its arguments (up to 8, each a plain string capped at 120 characters), whether it succeeded, a one-line summary, ms |
 | `retrieve` | the query (capped), the source file names, and per chunk its id, heading and relevance. Never the text |
-| `guardrail` | one per policy: its name and `pass` or `block`; a block adds the reason and rule. The matched phrase and the draft stay in the server log |
+| `guardrail` | one per policy: its name and `pass` or `block`; a block adds the reason and rule. When a policy let a discount claim through because of a `checkDiscount` result, it also carries `verified: [{ code, basis, turn }]` and a `note`, for example "WELCOME10: verified by checkDiscount on turn 2 of this conversation". The matched phrase and the draft stay in the server log |
 
 Every string that reaches a trace is cleaned: control characters and newlines removed, length capped, and the
 value of any environment variable whose name contains KEY, TOKEN, SECRET, PASSWORD, AUTH or CREDENTIAL (and the
@@ -122,6 +122,15 @@ shape of a Gemini, OpenAI-style or Bearer credential) replaced with `[redacted]`
 key back, or an error message that contains one, cannot put it in the response. A failed tool shows its
 controlled message ("getOrderStatus failed to execute."), never its stack. The trace never contains the system
 prompt. A trace holds at most 64 steps.
+
+Why a discount claim passed is recorded the same way, from the guardrail's own decision. The discount policy
+reports what it relied on through a `note` callback it is given: either that `checkDiscount` ran on this turn, or
+the codes its claim was matched against in the earlier-verification check (`checkAgainstVerified` returns them). The
+turn numbers come from the conversation store: when a verification is saved it is stored with the turn it ran on
+(the number of customer messages in the conversation at that point, in a `turn` column beside the tool result, never
+inside it, so the result is still exactly what the tool returned; an older database file gets the column added and
+its old rows read "earlier in this conversation"). The note is an explanation only: it is passed in after the
+decision and cannot change it.
 
 The guardrail outcome is `pass` or `block`. There is no "rewrite": when any policy objects, the whole reply is
 replaced by the fixed fallback, so there is no partial edit to report.

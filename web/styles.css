@@ -458,6 +458,11 @@ button { font-family: inherit; }
 .badge::before { content: "\2713"; font-weight: 700; }
 .badge.signal { background: var(--badge-signal-bg); color: var(--badge-signal-text); border-style: dashed; }
 .badge.signal::before { content: "!"; }
+/* The guardrails ran on this reply. Neutral when they passed it; the error colours, and a cross, when one blocked it. */
+.badge.guardrail { background: var(--panel); color: var(--muted); border-color: var(--line-strong); }
+.badge.guardrail::before { content: "¹3"; }
+.badge.guardrail.blocked { background: var(--error-bg); color: var(--error-text); border-color: var(--error-border); font-weight: 600; }
+.badge.guardrail.blocked::before { content: "¹5"; }
 /* A store file the answer drew on. Monospace and a page mark, so it reads as a source and not as a tool. */
 .badge.source { font-family: var(--font-mono); background: var(--panel); border-style: solid; }
 .badge.source::before { content: "\25A4"; font-weight: 400; }

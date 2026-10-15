@@ -45,7 +45,7 @@ below can be re-derived from those files.
 
 | | Result |
 |---|---|
-| Tests | **496 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
+| Tests | **513 passing**, offline (no key, no Chroma, no network); CI on Node 22.13 and 24 |
 | Mock evaluation | **21/21**. It replays scripted answers, so it checks the code around the model, **not a model** |
 | **Real evaluation, run 1** (the 21 cases) | **18/21 (85.7%)** |
 | **Real evaluation, fresh run** (21 new replies) | **21/21**: tool selection 14/14, signals 16/16, grounded 11/11, unsupported 1/1, safety 10/10 |
@@ -113,11 +113,14 @@ draft, deciding what is saved) is ordinary code that runs whether or not the mod
 ### The Operator view
 
 The header has a **Customer / Operator** toggle. Customer is the plain chat, with chips under each answer for the
-tools that ran, the knowledge-base files it drew on (`returns-policy.md`) and what it noticed. **Operator** adds
+tools that ran, the knowledge-base files it drew on (`returns-policy.md`), what it noticed, and whether the
+guardrails ran (*Guardrail checked*, or *Guardrail: blocked* when a policy replaced the draft). **Operator** adds
 a panel with the steps the server took on the selected reply, in order: *Signal: hesitation*, *Model call*
 (provider, model, latency, tokens in and out), *Called `getOrderStatus`* (arguments and a one-line result),
 *Searched knowledge base* with the files and chunk ids it returned, and *Guardrail: passed* with the eight
-policies listed (or *Guardrail: blocked*, naming the policy and why). Click a reply, or its "View steps" button,
+policies listed (or *Guardrail: blocked*, naming the policy and why). When a discount claim passes because a
+code was verified, the guardrail says on which turn: *WELCOME10: verified by checkDiscount on turn 2 of this
+conversation*. Click a reply, or its "View steps" button,
 to see that reply's steps. On a screen narrower than 900 px the panel is a bottom sheet.
 
 Everything in it comes from the `trace` the server returns with the reply, recorded while the turn ran and not
@@ -208,7 +211,7 @@ server/
   data/kb/               the four knowledge-base documents
   eval/                  the versioned dataset and the prompt sets used for real-model checks
   scripts/               demo, ingest, eval, smoke, guardrail-fp, rate-limit-probe
-  test/                  the test suite (496 tests, 38 files)
+  test/                  the test suite (513 tests, 39 files)
 web/                     the demo chat page: index.html, styles.css, app.js, trace.js, format.js
                          (no framework, no build step, no script that parses HTML)
 chroma/Dockerfile        a pinned Chroma image, only needed for hosting

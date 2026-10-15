@@ -58,16 +58,26 @@
   function chipsFor(body) {
     const trace = body && body.trace;
     if (isTrace(trace)) {
+      const checks = stepsOf(trace, 'guardrail');
       return {
         tools: unique(stepsOf(trace, 'tool').map((s) => TOOL_LABELS[s.name] || String(s.name))),
         sources: unique(stepsOf(trace, 'retrieve').flatMap((s) => (Array.isArray(s.sources) ? s.sources : []))),
         signals: unique(stepsOf(trace, 'signal').map((s) => SIGNAL_LABELS[s.signal] || String(s.signal))),
+        // What the guardrails did to this reply, only when they ran. There is no "rewritten": a policy that
+        // objects replaces the whole reply, which is "blocked".
+        guardrail:
+          checks.length === 0
+            ? null
+            : checks.some((s) => s.outcome === 'block')
+              ? { label: 'Guardrail: blocked', blocked: true }
+              : { label: 'Guardrail checked', blocked: false },
       };
     }
     return {
       tools: unique(((body && body.toolsUsed) || []).map((name) => TOOL_LABELS[name] || String(name))),
       sources: [],
       signals: unique(((body && body.signals) || []).map((s) => SIGNAL_LABELS[s.type] || String(s.type))),
+      guardrail: null,
     };
   }
 
@@ -148,7 +158,13 @@
   // line, with the policies listed under it. A block names the policy and its reason.
   function guardrailRow(checks) {
     const blocked = checks.filter((c) => c.outcome === 'block');
-    const items = checks.map((c) => ({ text: words(c.policy), tone: c.outcome === 'block' ? 'fail' : 'ok', mark: c.outcome === 'block' ? 'block' : 'pass' }));
+    // A policy that let a discount claim through says what it relied on ("WELCOME10: verified by checkDiscount on
+    // turn 2 of this conversation"); that note is the server's, recorded with the decision.
+    const items = checks.map((c) => ({
+      text: c.note ? `${words(c.policy)} — ${c.note}` : words(c.policy),
+      tone: c.outcome === 'block' ? 'fail' : 'ok',
+      mark: c.outcome === 'block' ? 'block' : 'pass',
+    }));
     if (blocked.length === 0) {
       return { kind: 'guardrail', icon: 'shield-check', tone: 'ok', label: 'Guardrail: passed', detail: [`${checks.length} policies checked, none triggered`], items };
     }

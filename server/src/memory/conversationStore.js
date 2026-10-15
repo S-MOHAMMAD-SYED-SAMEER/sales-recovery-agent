@@ -25,7 +25,13 @@ export function createConversationStore(db) {
   `);
 
   const insertVerifiedStmt = db.prepare(
-    'INSERT INTO verified_discounts (conversation_id, code, result) VALUES (?, ?, ?)'
+    'INSERT INTO verified_discounts (conversation_id, code, result, turn) VALUES (?, ?, ?, ?)'
+  );
+  const getVerifiedTurnsStmt = db.prepare(
+    'SELECT code, turn FROM verified_discounts WHERE conversation_id = ? ORDER BY id ASC'
+  );
+  const countUserMessagesStmt = db.prepare(
+    "SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ? AND role = 'user'"
   );
   const getVerifiedStmt = db.prepare(
     'SELECT result FROM verified_discounts WHERE conversation_id = ? ORDER BY id ASC'
@@ -55,10 +61,28 @@ export function createConversationStore(db) {
 
   // A checkDiscount result, exactly as the tool returned it, kept against THIS conversation.
   // Anything without a string `code` is not a discount verification and is not kept.
-  function saveVerifiedDiscount(sessionId, result) {
+  // `turn` is the turn of the conversation it ran on (see countUserMessages), kept beside the result and
+  // never inside it, so the result stays exactly what the tool returned.
+  function saveVerifiedDiscount(sessionId, result, turn = null) {
     if (!result || typeof result.code !== 'string') return;
     const conversation = getOrCreateConversation(sessionId);
-    insertVerifiedStmt.run(conversation.id, result.code.toUpperCase(), JSON.stringify(result));
+    const safeTurn = Number.isInteger(turn) && turn > 0 ? turn : null;
+    insertVerifiedStmt.run(conversation.id, result.code.toUpperCase(), JSON.stringify(result), safeTurn);
+  }
+
+  // The turn each code was last verified on, { CODE: turn | null }, this conversation only.
+  function getVerifiedTurns(sessionId) {
+    const conversation = getConversationStmt.get(sessionId);
+    if (!conversation) return {};
+    const turns = {};
+    for (const row of getVerifiedTurnsStmt.all(conversation.id)) turns[row.code] = row.turn ?? null;
+    return turns;
+  }
+
+  // How many customer messages this conversation has: the number of the turn that was just saved.
+  function countUserMessages(sessionId) {
+    const conversation = getConversationStmt.get(sessionId);
+    return conversation ? countUserMessagesStmt.get(conversation.id).n : 0;
   }
 
   // The checkDiscount results from this conversation only, oldest first. An unknown session has none.
@@ -78,5 +102,14 @@ export function createConversationStore(db) {
     db.close();
   }
 
-  return { getOrCreateConversation, getHistory, saveMessage, saveVerifiedDiscount, getVerifiedDiscounts, close };
+  return {
+    getOrCreateConversation,
+    getHistory,
+    saveMessage,
+    saveVerifiedDiscount,
+    getVerifiedDiscounts,
+    getVerifiedTurns,
+    countUserMessages,
+    close,
+  };
 }

@@ -281,7 +281,7 @@ test('the trace holds no system prompt, no stack trace and no passage text', asy
   assert.doesNotMatch(text, /\bat .*\(.*:\d+:\d+\)|file:\/\/|node_modules/);
   assert.ok(!text.includes('Items may be returned'));
   // And the keys of every step are a known, fixed set.
-  const allowed = new Set(['type', 'signal', 'confidence', 'why', 'provider', 'model', 'scripted', 'latencyMs', 'tokensIn', 'tokensOut', 'name', 'args', 'ok', 'summary', 'ms', 'query', 'unavailable', 'sources', 'chunks', 'policy', 'outcome', 'reason', 'rule']);
+  const allowed = new Set(['type', 'signal', 'confidence', 'why', 'provider', 'model', 'scripted', 'latencyMs', 'tokensIn', 'tokensOut', 'name', 'args', 'ok', 'summary', 'ms', 'query', 'unavailable', 'sources', 'chunks', 'policy', 'outcome', 'reason', 'rule', 'verified', 'note']);
   for (const step of result.body.trace.steps) for (const key of Object.keys(step)) assert.ok(allowed.has(key), `unexpected key ${key} in a ${step.type} step`);
 });
 

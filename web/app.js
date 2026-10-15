@@ -132,6 +132,8 @@
     for (const text of chips.tools) meta.appendChild(make('span', 'badge', text));
     for (const text of chips.sources) meta.appendChild(make('span', 'badge source', text));
     for (const text of chips.signals) meta.appendChild(make('span', 'badge signal', text));
+    // Whether the guardrails ran on this reply, and whether one blocked it. Only from the trace.
+    if (chips.guardrail) meta.appendChild(make('span', chips.guardrail.blocked ? 'badge guardrail blocked' : 'badge guardrail', chips.guardrail.label));
     return meta;
   }
 
@@ -144,7 +146,7 @@
     turn.appendChild(bubble);
 
     const chips = SraTrace.chipsFor(data);
-    if (chips.tools.length || chips.sources.length || chips.signals.length) turn.appendChild(chipRow(chips));
+    if (chips.tools.length || chips.sources.length || chips.signals.length || chips.guardrail) turn.appendChild(chipRow(chips));
 
     // Keyboard and touch way to the steps; only visible in the Operator view.
     const index = replies.length;
@@ -388,6 +390,12 @@
     const chip = e.target.closest('.suggestion-chip');
     if (!chip || pending) return;
     sendMessage(chip.dataset.msg);
+  });
+
+  // On a phone the quick-start row scrolls sideways. A chip that is only partly in view is not scrolled to by
+  // the browser when it takes keyboard focus, so a keyboard user would tab onto a half-hidden chip.
+  suggestions.addEventListener('focusin', (e) => {
+    if (e.target.classList && e.target.classList.contains('suggestion-chip')) e.target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   });
 
   newConvoButton.addEventListener('click', () => {

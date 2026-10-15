@@ -28,6 +28,9 @@ const SCHEMA = `
     conversation_id INTEGER NOT NULL REFERENCES conversations(id),
     code TEXT NOT NULL,
     result TEXT NOT NULL,
+    -- Which turn of the conversation (the n-th customer message) the tool ran on. NULL for rows written
+    -- before this column existed.
+    turn INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -42,5 +45,8 @@ export function createDb(dbPath) {
 
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
+  // A database file made before `turn` existed: add the column, leave old rows NULL.
+  const columns = db.prepare('PRAGMA table_info(verified_discounts)').all();
+  if (!columns.some((c) => c.name === 'turn')) db.exec('ALTER TABLE verified_discounts ADD COLUMN turn INTEGER');
   return db;
 }
