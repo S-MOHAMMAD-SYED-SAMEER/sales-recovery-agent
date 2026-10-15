@@ -18,7 +18,10 @@ import { handleChat } from '../src/routes/chat.js';
 // library and adds no dependency.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const demoPage = fs.readFileSync(path.resolve(__dirname, '../../web/index.html'), 'utf-8');
+const webDir = path.resolve(__dirname, '../../web');
+const htmlPage = fs.readFileSync(path.join(webDir, 'index.html'), 'utf-8');
+// The page is the HTML plus the scripts it loads; the wording and labels live in both.
+const demoPage = [htmlPage, ...['app.js', 'trace.js'].map((f) => fs.readFileSync(path.join(webDir, f), 'utf-8'))].join('\n');
 
 // Terms that must never appear in what a visitor reads. Checked against the
 // user-visible copy only (see stripCodeAndComments) — the surrounding source
@@ -45,7 +48,7 @@ function stripCodeAndComments(html) {
 }
 
 test('the header sells an outcome, not a list of AI features', () => {
-  const visible = stripCodeAndComments(demoPage);
+  const visible = stripCodeAndComments(htmlPage);
 
   assert.match(visible, /AI Customer Support &amp; Sales Recovery/);
   assert.match(visible, /answer customer questions instantly/);
@@ -64,7 +67,7 @@ test('the header sells an outcome, not a list of AI features', () => {
 });
 
 test('the fictional-data disclosure stays prominent, with its demo values intact', () => {
-  const visible = stripCodeAndComments(demoPage);
+  const visible = stripCodeAndComments(htmlPage);
 
   assert.match(visible, /demo with fictional data/i);
   assert.match(visible, /no real store, orders, or payments/i);
@@ -76,7 +79,7 @@ test('the fictional-data disclosure stays prominent, with its demo values intact
 });
 
 test('all six things a visitor can test are named on the page', () => {
-  const visible = stripCodeAndComments(demoPage);
+  const visible = stripCodeAndComments(htmlPage);
 
   for (const category of [
     'Product availability',
@@ -91,7 +94,7 @@ test('all six things a visitor can test are named on the page', () => {
 });
 
 test('no internal or infrastructure vocabulary appears in the visible copy', () => {
-  const visible = stripCodeAndComments(demoPage);
+  const visible = stripCodeAndComments(htmlPage);
 
   for (const term of INTERNAL_TERMS) {
     assert.ok(
@@ -108,7 +111,9 @@ test('the cold-start notice explains the wait without inventing progress', () =>
   // No fabricated progress reporting: the wait is real, but nothing about its
   // length is known, so nothing about its length is claimed. Checked against
   // the visible copy, since the stylesheet legitimately uses percentages.
-  assert.doesNotMatch(stripCodeAndComments(demoPage), /\d+\s?%/);
+  // The one place a percentage is legitimate is the quick-start row: "50% off" is a prompt a visitor can send.
+  const withoutQuickStart = stripCodeAndComments(htmlPage).replace(/<div class="suggestions"[\s\S]*?<\/div>/, ' ');
+  assert.doesNotMatch(withoutQuickStart, /\d+\s?%/);
   assert.doesNotMatch(demoPage, /progress-bar|progressBar/i);
   // setInterval would mean a ticking countdown; the notice is a single
   // one-shot setTimeout that fires only if the wait is genuinely long.

@@ -32,7 +32,8 @@ import { handleChat } from '../src/routes/chat.js';
 import { createDb } from '../src/memory/db.js';
 import { createConversationStore } from '../src/memory/conversationStore.js';
 import { ensureKnowledgeBase } from './lib/stack.js';
-import { citesReturnWindow, judge, knowledgeBaseProblem, knowledgeBaseUse, returnWindowDays, summarisePrompts } from './lib/rehearsal.js';
+import { citesReturnWindow, judge, knowledgeBaseProblem, knowledgeBaseUse, returnWindowDays, summarisePrompts, traceProblems } from './lib/rehearsal.js';
+import { POLICIES } from '../src/guardrails/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -122,6 +123,10 @@ outer: for (let take = 1; take <= runs; take += 1) {
       row.toolsUsed = result.body.toolsUsed;
       row.signals = result.body.signals.map((s) => s.type);
       row.modelCalls = result.usage?.calls ?? null;
+      // The per-turn trace the page shows, kept whole (it holds names, ids and numbers, never passage text), and
+      // checked against what the same turn produced by other routes: toolsUsed, signals, usage, the verdict.
+      row.trace = result.body.trace;
+      row.traceProblems = traceProblems(result, { policyNames: POLICIES.map((p) => p.name), secrets: [config.geminiApiKey] });
       row.knowledgeBase = knowledgeBaseUse(result.toolResults);
       // The exact checkDiscount results of this turn, so the take can be replayed offline with the
       // earlier turns' verifications (scripts/guardrail-fp.js --analyze).
@@ -150,7 +155,8 @@ outer: for (let take = 1; take <= runs; take += 1) {
     rows.push(row);
     console.log(
       `take ${take} ${step.id.padEnd(9)} ${result.status === 200 ? (row.blocked ? `BLOCKED (${row.violations.map((v) => `${v.name}/${v.rule}: ${JSON.stringify(v.matched)}`).join('; ')})` : 'ok') : `no answer (${result.status})`}` +
-        (step.id === CITED_STEP && result.status === 200 ? `  cites the ${windowDays}-day window: ${row.citesReturnPolicy ? 'yes' : 'NO'}` : '')
+        (step.id === CITED_STEP && result.status === 200 ? `  cites the ${windowDays}-day window: ${row.citesReturnPolicy ? 'yes' : 'NO'}` : '') +
+        (result.status === 200 ? `  trace: ${row.traceProblems.length === 0 ? `consistent (${row.trace.steps.map((s) => s.type).filter((t, i, a) => t !== 'guardrail' || a.indexOf('guardrail') === i).join(' > ')})` : `PROBLEM ${row.traceProblems.join('; ')}`}` : '')
     );
     if (consecutiveFailures >= 2) {
       aborted = { kind: 'outage', reason: 'Two replies in a row never came back (an outage or a quota); stopped instead of retrying in a loop.', afterTake: take, afterStep: step.id };
@@ -160,6 +166,8 @@ outer: for (let take = 1; take <= runs; take += 1) {
   }
 }
 
+const answeredRows = rows.filter((row) => row.status === 200);
+const traceConsistent = answeredRows.filter((row) => row.traceProblems.length === 0).length;
 const perPrompt = summarisePrompts(STEPS, rows);
 const verdict = judge({ perPrompt, rows, runs, mustNotBlock: MUST_NOT_BLOCK, citedStep: CITED_STEP, aborted });
 
@@ -169,6 +177,8 @@ console.log(
   `\nPass condition (0 blocks on "50% off" and "still deciding", and every "still deciding" reply states the ${windowDays}-day return window): ` +
     `${verdict.pass ? 'PASS' : 'NOT MET'} (${verdict.criticalBlocked} blocked of ${verdict.criticalAnswered} answered; ${verdict.citedReturnPolicy} of ${runs} "still deciding" replies cite the return window${aborted ? `; run stopped: ${aborted.kind}` : ''}).`
 );
+
+console.log(`Trace check: ${traceConsistent} of ${answeredRows.length} answered replies have a trace consistent with what the turn did.`);
 
 if (record) {
   const dir = path.resolve(__dirname, '../../docs/results');
@@ -189,6 +199,7 @@ if (record) {
     aborted,
     pass: verdict.pass,
     verdict,
+    trace: { consistent: traceConsistent, answered: answeredRows.length },
     perPrompt,
     rows,
   };

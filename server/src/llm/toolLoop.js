@@ -1,4 +1,5 @@
 import { summarizeUsage } from './usage.js';
+import { currentTrace } from '../trace/index.js';
 
 const DEFAULT_MAX_ITERATIONS = 3;
 
@@ -32,7 +33,10 @@ export async function runToolLoop({
   const modelCalls = [];
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    // Timed here, around the real call, so the trace's model step is what happened, whichever adapter ran.
+    const callStartedAt = performance.now();
     const modelResult = await callModel(state);
+    currentTrace()?.modelCall({ latencyMs: performance.now() - callStartedAt, usage: modelResult.usage });
     if (modelResult.usage) modelCalls.push(modelResult.usage);
     const { text, functionCalls = [] } = modelResult;
 

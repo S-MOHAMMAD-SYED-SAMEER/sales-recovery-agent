@@ -130,19 +130,30 @@ test('markup in a reply is shown as text: it is never turned into elements, and 
   }
 });
 
-test('the page never assigns data to innerHTML, and draws a reply with the formatter', () => {
-  const script = page.slice(page.lastIndexOf('<script>'));
-  const assignments = [...script.matchAll(/innerHTML\s*=\s*([^;]+);/g)].map((m) => m[1].trim());
-  assert.ok(assignments.length > 0, 'precondition: the page still uses innerHTML for its own fixed markup');
-  for (const value of assignments) {
-    // Every right-hand side is a literal string (or a concatenation of literals): nothing from a reply or a user.
-    const literal = String.raw`(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")`;
-    const onlyLiterals = new RegExp(String.raw`^${literal}(?:\s*\+\s*${literal})*$`, 's');
-    assert.match(value, onlyLiterals, `innerHTML = ${value}`);
+// Every script the page runs. None of them may parse markup: a reply, a customer's message and a trace
+// are data, and the only safe way to show data is as text nodes. The rule is "never", not "only literals".
+const WEB_SCRIPTS = ['format.js', 'trace.js', 'app.js'];
+const FORBIDDEN_MARKUP_APIS = /innerHTML|outerHTML|insertAdjacentHTML|document\.write|createContextualFragment|DOMParser|srcdoc|\beval\s*\(|new\s+Function\s*\(|setAttribute\(\s*['"]on/;
+
+test('no script of the page can parse HTML, and the page has no inline script', () => {
+  for (const file of WEB_SCRIPTS) {
+    // Comments are free to name the APIs they warn about; only code is scanned.
+    const source = fs.readFileSync(path.join(webDir, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!FORBIDDEN_MARKUP_APIS.test(source), `${file} uses an API that parses markup or code`);
   }
-  assert.match(script, /SraFormat\.renderReply\(document, bubble, text\)/);
-  assert.ok(!/bubble\.innerHTML|\.insertAdjacentHTML|outerHTML|document\.write/.test(script));
-  assert.match(page, /<script src="format\.js"><\/script>/);
+  // Nothing runs from the HTML file itself, so there is nothing there to audit, and no handler attributes.
+  assert.ok(!/<script(?![^>]*\bsrc=)/i.test(page), 'index.html has an inline script');
+  assert.ok(!/\son[a-z]+\s*=/i.test(page), 'index.html has an inline event handler');
+  // Every script file that exists in web/ is on the list above, so a new one cannot slip past the scan.
+  const onDisk = fs.readdirSync(webDir).filter((f) => f.endsWith('.js')).sort();
+  assert.deepEqual(onDisk, [...WEB_SCRIPTS].sort());
+});
+
+test('the page draws a reply with the formatter and loads its scripts in dependency order', () => {
+  const app = fs.readFileSync(path.join(webDir, 'app.js'), 'utf8');
+  assert.match(app, /SraFormat\.renderReply\(document, bubble, data\.reply\)/);
+  const order = [...page.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
+  assert.deepEqual(order, ['format.js', 'trace.js', 'app.js']);
 });
 
 test('the formatter is served next to the page', async (t) => {
@@ -224,6 +235,7 @@ test('the page shows "Live · <model>" only from a live answer, and keeps Demo o
 
   // The page starts as Demo and changes only through textContent.
   assert.match(page, /<span class="tag" id="mode-tag">Demo<\/span>/);
-  assert.match(page, /tag\.textContent = mode\.text;/);
-  assert.match(page, /fetch\('\/api\/mode'\)/);
+  const app = fs.readFileSync(path.join(webDir, 'app.js'), 'utf8');
+  assert.match(app, /tag\.textContent = mode\.text;/);
+  assert.match(app, /fetch\('\/api\/mode'\)/);
 });

@@ -17,6 +17,7 @@ export function createRetriever({ vectorStore, embedText }) {
     return matches
       .filter((match) => typeof match.score === 'number' && match.score >= minScore)
       .map((match) => ({
+        ...(match.id !== undefined ? { id: match.id } : {}),
         source: match.metadata.source,
         heading: match.metadata.heading,
         text: match.text,
