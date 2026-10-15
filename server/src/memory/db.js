@@ -28,9 +28,11 @@ const SCHEMA = `
     conversation_id INTEGER NOT NULL REFERENCES conversations(id),
     code TEXT NOT NULL,
     result TEXT NOT NULL,
-    -- Which turn of the conversation (the n-th customer message) the tool ran on. NULL for rows written
-    -- before this column existed.
+    -- The number of the customer's question the tool ran on: 1-based, counting customer messages only (not
+    -- the assistant's replies, not tool calls). NULL for rows written before this column existed.
     turn INTEGER,
+    -- A short plain-text excerpt of that question, capped. NULL for older rows.
+    excerpt TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -45,8 +47,9 @@ export function createDb(dbPath) {
 
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
-  // A database file made before `turn` existed: add the column, leave old rows NULL.
+  // A database file made before `turn` or `excerpt` existed: add the column, leave old rows NULL.
   const columns = db.prepare('PRAGMA table_info(verified_discounts)').all();
   if (!columns.some((c) => c.name === 'turn')) db.exec('ALTER TABLE verified_discounts ADD COLUMN turn INTEGER');
+  if (!columns.some((c) => c.name === 'excerpt')) db.exec('ALTER TABLE verified_discounts ADD COLUMN excerpt TEXT');
   return db;
 }

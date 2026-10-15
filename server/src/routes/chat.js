@@ -101,10 +101,10 @@ export async function handleChat({ sessionId, message }, deps = {}) {
   // true statement about one is not mistaken for an unverified claim. Same degradation rule as
   // history: if they cannot be read, the guardrails simply see none and are stricter.
   let verifiedDiscounts = [];
-  let verifiedTurns = {};
+  let verifiedQuestions = {};
   try {
     verifiedDiscounts = conversationStore.getVerifiedDiscounts?.(sessionId) ?? [];
-    verifiedTurns = conversationStore.getVerifiedTurns?.(sessionId) ?? {};
+    verifiedQuestions = conversationStore.getVerifiedQuestions?.(sessionId) ?? {};
   } catch (err) {
     console.error('[chat] Failed to load verified discounts:', err.message);
   }
@@ -155,7 +155,7 @@ export async function handleChat({ sessionId, message }, deps = {}) {
         .map((r) => r.outcome.result.code)
     ),
   ];
-  const guardrailResult = validateReply({ reply: text, toolsUsed, verifiedDiscounts, verifiedTurns, verifiedThisTurn });
+  const guardrailResult = validateReply({ reply: text, toolsUsed, verifiedDiscounts, verifiedQuestions, verifiedThisTurn });
   if (!guardrailResult.safe) {
     // Always the policy and what matched: enough to tell a right block from a wrong one.
     for (const v of guardrailResult.violations) {
@@ -195,10 +195,11 @@ export async function handleChat({ sessionId, message }, deps = {}) {
   // reply, so it is kept against this conversation for the turns that follow. Only a successful
   // tool result is kept, and it comes from the executor, not from anything the model wrote.
   try {
-    // The turn number is the count of customer messages once this one is saved.
-    const turn = conversationStore.countUserMessages?.(sessionId);
+    // The question number is the count of customer messages once this one is saved (replies and tool calls
+    // are not counted), kept with a short excerpt of the question so the trace can show which one it was.
+    const question = conversationStore.countUserMessages?.(sessionId);
     for (const { name, outcome } of toolResults) {
-      if (name === 'checkDiscount' && outcome?.ok) conversationStore.saveVerifiedDiscount?.(sessionId, outcome.result, turn);
+      if (name === 'checkDiscount' && outcome?.ok) conversationStore.saveVerifiedDiscount?.(sessionId, outcome.result, question, message);
     }
   } catch (err) {
     console.error('[chat] Failed to persist verified discounts:', err.message);

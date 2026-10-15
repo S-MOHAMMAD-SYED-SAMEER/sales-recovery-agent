@@ -8,7 +8,6 @@
 (function () {
   'use strict';
 
-  const SESSION_KEY = 'sra_session_id';
   const THEME_KEY = 'sra_theme';
   const VIEW_KEY = 'sra_view';
   const HINT_MS = 2500;
@@ -16,7 +15,7 @@
   const NARROW = window.matchMedia('(max-width: 899px)');
 
   // Browser storage can be missing or throw (a private window, blocked site data). The page works
-  // without it: it only remembers a session, a theme and a view.
+  // without it: it only remembers the theme and the view. It never keeps the conversation there.
   function readStored(key) {
     try {
       return window.localStorage.getItem(key);
@@ -32,12 +31,9 @@
     }
   }
 
-  function newSessionId() {
-    const id = crypto.randomUUID();
-    writeStored(SESSION_KEY, id);
-    return id;
-  }
-  let sessionId = readStored(SESSION_KEY) || newSessionId();
+  // Every page load starts a new conversation, like the New conversation button (see session.js).
+  const newSessionId = () => crypto.randomUUID();
+  let sessionId = SraSession.startSession(window.localStorage, newSessionId);
 
   const app = document.getElementById('app');
   const log = document.getElementById('log');

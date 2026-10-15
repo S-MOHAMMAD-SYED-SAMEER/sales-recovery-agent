@@ -114,7 +114,7 @@ What a step may contain is decided by a whitelist in `src/trace/index.js`, not b
 | `model` | provider, model id, latency in ms, tokens in and out as the adapter reported them (`null` when it did not) |
 | `tool` | the tool name, its arguments (up to 8, each a plain string capped at 120 characters), whether it succeeded, a one-line summary, ms |
 | `retrieve` | the query (capped), the source file names, and per chunk its id, heading and relevance. Never the text |
-| `guardrail` | one per policy: its name and `pass` or `block`; a block adds the reason and rule. When a policy let a discount claim through because of a `checkDiscount` result, it also carries `verified: [{ code, basis, turn }]` and a `note`, for example "WELCOME10: verified by checkDiscount on turn 2 of this conversation". The matched phrase and the draft stay in the server log |
+| `guardrail` | one per policy: its name and `pass` or `block`; a block adds the reason and rule. When a policy let a discount claim through because of a `checkDiscount` result, it also carries `verified: [{ code, basis, question, excerpt }]` and a `note`, for example "WELCOME10: verified by checkDiscount on question 1 (\"Is WELCOME10 valid?\")". The matched phrase and the draft stay in the server log |
 
 Every string that reaches a trace is cleaned: control characters and newlines removed, length capped, and the
 value of any environment variable whose name contains KEY, TOKEN, SECRET, PASSWORD, AUTH or CREDENTIAL (and the
@@ -126,11 +126,18 @@ prompt. A trace holds at most 64 steps.
 Why a discount claim passed is recorded the same way, from the guardrail's own decision. The discount policy
 reports what it relied on through a `note` callback it is given: either that `checkDiscount` ran on this turn, or
 the codes its claim was matched against in the earlier-verification check (`checkAgainstVerified` returns them). The
-turn numbers come from the conversation store: when a verification is saved it is stored with the turn it ran on
-(the number of customer messages in the conversation at that point, in a `turn` column beside the tool result, never
-inside it, so the result is still exactly what the tool returned; an older database file gets the column added and
-its old rows read "earlier in this conversation"). The note is an explanation only: it is passed in after the
-decision and cannot change it.
+question numbers come from the conversation store: when a verification is saved it is stored with the number of the
+customer's question it ran on and a short excerpt of that question (capped at 120 characters in the store and 60 in the
+trace, one line, secrets removed, drawn by the page as a text node). "Question n" is the customer's n-th message, from 1:
+the store counts rows with role `user` only, so assistant replies and tool exchanges between questions cannot move it. The
+two values sit in `turn` and `excerpt` columns beside the tool result, never inside it, so the result is still exactly what
+the tool returned; an older database file gets the columns added and its old rows read "on an earlier question". The note
+is an explanation only: it is passed in after the decision and cannot change it.
+
+The number is only meaningful if the conversation is the one the viewer can see. The page therefore starts a new
+conversation on every load (`web/session.js`), like the New conversation button, and keeps nothing about the conversation in
+browser storage. It used to keep the session id there, so a reload showed an empty chat on top of an old server conversation,
+and a code checked on the viewer's 7th visible question was reported as question 16.
 
 The guardrail outcome is `pass` or `block`. There is no "rewrite": when any policy objects, the whole reply is
 replaced by the fixed fallback, so there is no partial edit to report.
