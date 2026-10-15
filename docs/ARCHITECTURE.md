@@ -189,7 +189,7 @@ flowchart TD
     D --> E["Look at its clause, cut at<br/>, ; : and but so because"]
     E --> F{"Refusal, offer to check,<br/>conditional, or the agent saying<br/>what it does not know?"}
     F -- yes --> OK
-    F -- no --> G{"Did the matching tool run?"}
+    F -- no --> G{"Did the matching tool run?<br/>(discounts also: was the code verified earlier<br/>in this conversation, every detail matching?)"}
     D -- "other policies" --> G
     G -- yes --> OK
     G -- no --> V["violation"]
@@ -205,6 +205,7 @@ flowchart TD
   count a match only if its clause is not a refusal, an offer, a conditional, or the agent saying it does not
   know. The clause is cut at commas and at *and / but / so / because*, so a refusal cannot excuse a claim in
   the next breath ("I can't promise it will last, but use SAVE20 for 20% off" is still blocked).
+- **A code verified earlier in the same conversation.** The discount policy used to trust `checkDiscount` from the current turn only, so a true reply that named a code checked one turn before ("the only code I can verify is WELCOME10, which gives 10% off for first-time customers") was blocked. `chat.js` now keeps each successful `checkDiscount` result, exactly as the tool returned it, against its conversation (`verified_discounts`), and passes the earlier ones to the policy. A statement about such a code passes only if everything it claims matches that result: the code, any percentage, any date, an eligibility phrase that is in the tool's description, and whether it is valid. A money amount never matches (the tool returns percentages). A code never verified, a claim that names no code, any mismatch, and a code verified only in another conversation still block. The records come from the tool executor, never from model text or the customer's message.
 - **Scope.** Guardrails enforce discount, stock, order-status and promotion claims in code. Other product-fact claims (how items are sold, materials, dimensions and so on) rely on retrieval grounding, not on a code check. Planned for v1.1: claim verification against the knowledge base.
 - **What this does and does not prove.** The check is that the *right tool ran*, not that the reply's number
   matches the tool's. It is a set of patterns over English text: it catches the shapes it was built for, and

@@ -2,7 +2,7 @@
 
 ```
 cd server
-npm test            # 372 tests in 29 files, about 5 seconds
+npm test            # 421 tests in 33 files, about 5 seconds
 npm run eval        # the mock evaluation: 21/21
 ```
 
@@ -26,6 +26,8 @@ their date, model and dataset version instead of being asserted in tests.
 | **The turn** (`chat.route`, `chat.demoProvider.integration`, `clientFacingCopy`) | 55 | `handleChat` end to end with a stub model: validation, history, memory isolation between sessions, signals in the prompt, guardrail blocking and what is persisted, an empty model reply, usage logging. `clientFacingCopy` checks that nothing a customer can read names a provider, a variable or a file |
 | **Business tools** (`tools`) | 22 | Deterministic mock data, argument validation, a dispatcher that never throws, whole-word stock matching, expiry-aware discounts on a pinned clock, no "found" for `constructor` |
 | **Guardrails** (`guardrails`, `guardrail.measurement`) | 35 | A violating and a safe case for each of the eight policies; claim versus mention; and a test that reads every real draft kept in `docs/results/` and checks the policy against the hand label on it |
+| **Discounts verified earlier in the conversation** (`guardrails.verifiedDiscounts`) | 17 | A true statement about a code checked on an earlier turn is allowed, and only then: never-verified codes, claims that name no code, every kind of mismatch (percentage, eligibility, money amount, expiry date, validity both ways) and a verification made in another conversation all still block. Records are the real tool's output. The reply blocked in the 2026-10-15 rehearsal is a regression test (allowed with the earlier check, blocked without), end to end through `handleChat`, including that a customer cannot plant a verification and that a store without the new methods falls back to the stricter behaviour |
+| **The rehearsal script** (`scripts.rehearsal`) | 10 | Without a model: a knowledge-base failure of any kind is an error, the return window is read from the policy file and a reply either states it or does not, the pass condition (including that a stopped run never passes), and that the script refuses to start, with no model call, when Chroma is not there |
 | **Signals** (`signals`) | 15 | Every signal type fires on its phrasing, ordinary messages fire nothing, the output shape, current-message-only scope, and that a directive never dictates a discount |
 | **Retrieval** (`chunker`, `rag.*`) | 58 | Heading-based chunking including CRLF files, idempotent ingestion and stale-chunk cleanup, relevance threshold, "nothing found" versus "store unreachable", a Chroma handle that goes stale and heals, an empty collection restored on demand |
 | **Model adapters** (`llm.gemini`, `llm.anthropic`, `llm.resilience`, `llm.usage`, `toolLoop`) | 55 | Against fake clients: the request actually sent (model, token cap, temperature, abort signal), retry and backoff, `Retry-After`, giving up on a long wait, blocked and empty replies, the tool loop's three-call cap, tokens and latency recorded |
