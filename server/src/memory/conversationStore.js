@@ -1,4 +1,5 @@
 const DEFAULT_HISTORY_LIMIT = 20;
+const EXCERPT_MAX_CHARS = 120;
 
 // Repository interface over the conversations/messages tables. Takes a
 // node:sqlite DatabaseSync instance so tests can pass in a fresh ':memory:'
@@ -25,10 +26,10 @@ export function createConversationStore(db) {
   `);
 
   const insertVerifiedStmt = db.prepare(
-    'INSERT INTO verified_discounts (conversation_id, code, result, turn) VALUES (?, ?, ?, ?)'
+    'INSERT INTO verified_discounts (conversation_id, code, result, turn, excerpt) VALUES (?, ?, ?, ?, ?)'
   );
-  const getVerifiedTurnsStmt = db.prepare(
-    'SELECT code, turn FROM verified_discounts WHERE conversation_id = ? ORDER BY id ASC'
+  const getVerifiedQuestionsStmt = db.prepare(
+    'SELECT code, turn, excerpt FROM verified_discounts WHERE conversation_id = ? ORDER BY id ASC'
   );
   const countUserMessagesStmt = db.prepare(
     "SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ? AND role = 'user'"
@@ -61,25 +62,28 @@ export function createConversationStore(db) {
 
   // A checkDiscount result, exactly as the tool returned it, kept against THIS conversation.
   // Anything without a string `code` is not a discount verification and is not kept.
-  // `turn` is the turn of the conversation it ran on (see countUserMessages), kept beside the result and
-  // never inside it, so the result stays exactly what the tool returned.
-  function saveVerifiedDiscount(sessionId, result, turn = null) {
+  // `question` is the number of the customer's question it ran on (see countUserMessages) and `excerpt` a short
+  // plain-text piece of it, both kept beside the result and never inside it, so the result stays exactly what the
+  // tool returned. A number that is not a positive whole number, or an empty excerpt, is kept as unknown.
+  function saveVerifiedDiscount(sessionId, result, question = null, excerpt = null) {
     if (!result || typeof result.code !== 'string') return;
     const conversation = getOrCreateConversation(sessionId);
-    const safeTurn = Number.isInteger(turn) && turn > 0 ? turn : null;
-    insertVerifiedStmt.run(conversation.id, result.code.toUpperCase(), JSON.stringify(result), safeTurn);
+    const safeQuestion = Number.isInteger(question) && question > 0 ? question : null;
+    const safeExcerpt = typeof excerpt === 'string' && excerpt.trim() ? excerpt.replace(/\s+/g, ' ').trim().slice(0, EXCERPT_MAX_CHARS) : null;
+    insertVerifiedStmt.run(conversation.id, result.code.toUpperCase(), JSON.stringify(result), safeQuestion, safeExcerpt);
   }
 
-  // The turn each code was last verified on, { CODE: turn | null }, this conversation only.
-  function getVerifiedTurns(sessionId) {
+  // Which question each code was last verified on, { CODE: { question, excerpt } }, this conversation only.
+  function getVerifiedQuestions(sessionId) {
     const conversation = getConversationStmt.get(sessionId);
     if (!conversation) return {};
-    const turns = {};
-    for (const row of getVerifiedTurnsStmt.all(conversation.id)) turns[row.code] = row.turn ?? null;
-    return turns;
+    const out = {};
+    for (const row of getVerifiedQuestionsStmt.all(conversation.id)) out[row.code] = { question: row.turn ?? null, excerpt: row.excerpt ?? null };
+    return out;
   }
 
-  // How many customer messages this conversation has: the number of the turn that was just saved.
+  // How many customer messages this conversation has, and so the number of the question that was just saved.
+  // Only role 'user' rows count: replies and tool calls between questions never move it.
   function countUserMessages(sessionId) {
     const conversation = getConversationStmt.get(sessionId);
     return conversation ? countUserMessagesStmt.get(conversation.id).n : 0;
@@ -108,7 +112,7 @@ export function createConversationStore(db) {
     saveMessage,
     saveVerifiedDiscount,
     getVerifiedDiscounts,
-    getVerifiedTurns,
+    getVerifiedQuestions,
     countUserMessages,
     close,
   };

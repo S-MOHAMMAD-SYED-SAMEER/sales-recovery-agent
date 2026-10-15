@@ -1,9 +1,11 @@
-// Browser evidence for the follow-up to the UI upgrade (not part of `npm test`). Run against a server on :3112 with
+// Browser evidence for the follow-ups to the UI upgrade (not part of `npm test`). Run against a server on :3112 with
 // the DEMO provider (it sends real messages through the page):
 //   PORT=3112 LLM_PROVIDER=demo node src/index.js   then   node headless-check-u4b.mjs <screenshot-dir>
 // Checks: the "Guardrail checked" and "Guardrail: blocked" chips, the "verified by checkDiscount" note in the Operator
 // panel, the cold-start notice (only when the FIRST reply is slow; removed with the reply; never on a later message or a
-// fast first one), and the quick-start row at 375 px (first chip keeps the gutter; all five reachable by keyboard).
+// fast first one), the quick-start row at 375 px (first chip keeps the gutter; all five reachable by keyboard), and that a
+// reload starts a new conversation (a different session id each load, the old stored id ignored and deleted, only the
+// view and theme kept in storage).
 import { chromium } from 'playwright-core';
 const URL = 'http://localhost:3112/';
 const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
@@ -28,7 +30,7 @@ await p.click('.turn.assistant >> nth=0 >> .bubble');
 await p.waitForTimeout(200);
 const items = await p.$$eval('#panel-body .step-item', (e) => e.map((x) => x.textContent));
 console.log('  panel items for the WELCOME10 reply:', JSON.stringify(items.filter((t) => /discount/.test(t))));
-check('panel shows "verified by checkDiscount on this turn"', items.some((t) => t === '✓ no unverified discount claim — WELCOME10: verified by checkDiscount on this turn'));
+check('panel shows "verified by checkDiscount on this question"', items.some((t) => t === '✓ no unverified discount claim — WELCOME10: verified by checkDiscount on this question'));
 await p.screenshot({ path: process.argv[2] + '/guardrail-note.png' });
 await p.close();
 
@@ -85,6 +87,29 @@ for (let i = 0; i < 5; i++) {
 console.log('  keyboard walk:', JSON.stringify(reached));
 check('all 5 chips reachable by keyboard and scrolled fully into view', reached.length === 5 && reached.every((x) => x.inside));
 await m.close();
+
+// 4. a reload starts a new conversation; nothing about the conversation is kept in browser storage
+{
+  const q = await b.newPage({ viewport: { width: 1000, height: 800 } });
+  const ids = [];
+  q.on('request', (r) => { if (r.url().endsWith('/api/chat')) ids.push(JSON.parse(r.postData()).sessionId); });
+  await q.goto(URL);
+  await q.evaluate(() => localStorage.setItem('sra_session_id', 'old-conversation-from-an-earlier-version'));
+  await q.reload();
+  await q.fill('#message', 'Is WELCOME10 valid?'); await q.press('#message', 'Enter');
+  await q.waitForFunction(() => document.querySelectorAll('.turn.assistant .bubble').length >= 1);
+  await q.click('#view-operator');
+  await q.reload();
+  await q.fill('#message', 'Is WELCOME10 valid?'); await q.press('#message', 'Enter');
+  await q.waitForFunction(() => document.querySelectorAll('.turn.assistant .bubble').length >= 1);
+  const keys = await q.evaluate(() => Object.keys(localStorage).sort());
+  console.log('  session ids sent:', ids.length, 'distinct:', new Set(ids).size, '| storage keys:', JSON.stringify(keys));
+  check('each page load sends a different session id', ids.length === 2 && new Set(ids).size === 2);
+  check('the id an earlier version stored is not used, and is deleted', !ids.includes('old-conversation-from-an-earlier-version') && !keys.includes('sra_session_id'));
+  check('the view is remembered across the reload (Operator stays on)', (await q.getAttribute('#view-operator', 'aria-pressed')) === 'true');
+  check('the chat is empty after the reload, and so is the server conversation (no question 1 note: this is a fresh question 1)', (await q.locator('.turn.assistant').count()) === 1);
+  await q.close();
+}
 await b.close();
 console.log(fails.length ? `\nFAILED: ${fails.join('; ')}` : '\nALL PASS');
 process.exit(fails.length ? 1 : 0);

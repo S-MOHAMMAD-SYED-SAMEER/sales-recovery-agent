@@ -113,11 +113,14 @@ export function summarizeToolOutcome(name, outcome) {
   }
 }
 
-// "WELCOME10: verified by checkDiscount on turn 2 of this conversation".
-export function describeVerification({ code, basis, turn }) {
+// "WELCOME10: verified by checkDiscount on question 1 (\"Is WELCOME10 valid?\")". The number counts the customer's
+// questions only, from 1. The excerpt is the question itself, capped and cleaned like any trace text.
+const EXCERPT_CHARS = 60;
+export function describeVerification({ code, basis, question, excerpt }) {
   const who = code ? `${code}: ` : '';
-  if (basis === 'this-turn') return `${who}verified by checkDiscount on this turn`;
-  const where = Number.isInteger(turn) ? `on turn ${turn} of this conversation` : 'earlier in this conversation';
+  if (basis === 'this-turn') return `${who}verified by checkDiscount on this question`;
+  const quoted = excerpt ? ` ("${cleanText(excerpt, EXCERPT_CHARS)}")` : '';
+  const where = Number.isInteger(question) ? `on question ${question}${quoted}` : 'on an earlier question';
   return `${who}verified by checkDiscount ${where}`;
 }
 
@@ -213,11 +216,12 @@ export function createTrace({ clock = () => performance.now(), model = null } = 
     // partial rewrite in v1.0), so the outcome is "pass" or "block".
     guardrail({ policy, outcome, reason, rule, verified }) {
       // Why a claim was allowed, when the policy relied on a checkDiscount result: which code, and whether the
-      // tool ran on this turn or on an earlier one (and which). Passed on from the policy's own decision.
+      // tool ran on this question or on an earlier one (which number, and an excerpt). Passed on from the policy's own decision.
       const basis = (Array.isArray(verified) ? verified : []).slice(0, 8).map((v) => ({
         code: v.code ? cleanText(v.code, 40) : null,
         basis: v.basis === 'earlier-turn' ? 'earlier-turn' : 'this-turn',
-        turn: Number.isInteger(v.turn) ? v.turn : null,
+        question: Number.isInteger(v.question) ? v.question : null,
+        excerpt: v.excerpt ? cleanText(v.excerpt, EXCERPT_CHARS) : null,
       }));
       add({
         type: 'guardrail',

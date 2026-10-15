@@ -8,18 +8,19 @@ export const SAFE_FALLBACK_REPLY =
   "I want to make sure I give you accurate information, and I'm not confident that answer is " +
   'correct. Let me connect you with our support team, who can help directly.';
 
-// The verifications a policy relied on, as { code, basis, turn }: the code, whether the tool ran on this
-// turn or on an earlier one, and which turn of the conversation that was (null when it is not known: a
-// row from before turns were recorded, or a store that does not record them). Built from the policy's
-// own notes; the turn numbers are what the conversation store kept when the tool ran.
-function provenance(notes, { verifiedTurns = {}, verifiedThisTurn = [] }) {
+// The verifications a policy relied on, as { code, basis, question, excerpt }: the code, whether the tool ran on
+// this turn or on an earlier one, and for an earlier one which of the customer's questions it was (1-based) with
+// a short excerpt of it (null when not known: a row from before they were recorded, or a store that does not
+// record them). Built from the policy's own notes; the question numbers are what the conversation store kept
+// when the tool ran.
+function provenance(notes, { verifiedQuestions = {}, verifiedThisTurn = [] }) {
   const out = [];
   for (const n of notes) {
     if (n.basis === 'this-turn') {
       const codes = verifiedThisTurn.length > 0 ? verifiedThisTurn : [null];
-      for (const code of codes) out.push({ code, basis: 'this-turn', turn: null });
+      for (const code of codes) out.push({ code, basis: 'this-turn', question: null, excerpt: null });
     } else if (n.basis === 'earlier-turn') {
-      for (const code of n.codes) out.push({ code, basis: 'earlier-turn', turn: verifiedTurns[code] ?? null });
+      for (const code of n.codes) out.push({ code, basis: 'earlier-turn', question: verifiedQuestions[code]?.question ?? null, excerpt: verifiedQuestions[code]?.excerpt ?? null });
     }
   }
   return out;
@@ -57,16 +58,16 @@ function checkPolicies(context) {
   return violations.length === 0 ? { safe: true, violations: [], checks } : { safe: false, violations, checks };
 }
 
-// context: { reply, toolsUsed, verifiedDiscounts, verifiedTurns, verifiedThisTurn }. `verifiedDiscounts` are the
-// checkDiscount results from earlier turns of the SAME conversation (never another one); `verifiedTurns` says which
-// turn each code was verified on ({ CODE: turn }) and `verifiedThisTurn` lists the codes checkDiscount checked on
+// context: { reply, toolsUsed, verifiedDiscounts, verifiedQuestions, verifiedThisTurn }. `verifiedDiscounts` are the
+// checkDiscount results from earlier turns of the SAME conversation (never another one); `verifiedQuestions` says which
+// question each code was verified on ({ CODE: { question, excerpt } }) and `verifiedThisTurn` lists the codes checkDiscount checked on
 // this turn. The last two only feed the explanation of a decision (`checks[].verified`), never the decision. Returns { safe, violations, finalReply }.
 // finalReply is the reply text that should actually be shown to the user
 // and persisted to memory — the original reply when safe, the fallback
 // when not. Callers should never fall back to the original reply text
 // themselves on an unsafe result; use finalReply.
-export function validateReply({ reply, toolsUsed = [], verifiedDiscounts = [], verifiedTurns = {}, verifiedThisTurn = [] }) {
-  const result = checkPolicies({ reply, toolsUsed, verifiedDiscounts, verifiedTurns, verifiedThisTurn });
+export function validateReply({ reply, toolsUsed = [], verifiedDiscounts = [], verifiedQuestions = {}, verifiedThisTurn = [] }) {
+  const result = checkPolicies({ reply, toolsUsed, verifiedDiscounts, verifiedQuestions, verifiedThisTurn });
 
   // `checks` is one { policy, outcome: 'pass' | 'block' } per policy that ran: the trace shows them.
   const checks = result.checks.map(({ policy, outcome, verified }) => ({ policy, outcome, verified }));

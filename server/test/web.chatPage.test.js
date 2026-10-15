@@ -132,7 +132,7 @@ test('markup in a reply is shown as text: it is never turned into elements, and 
 
 // Every script the page runs. None of them may parse markup: a reply, a customer's message and a trace
 // are data, and the only safe way to show data is as text nodes. The rule is "never", not "only literals".
-const WEB_SCRIPTS = ['format.js', 'trace.js', 'app.js'];
+const WEB_SCRIPTS = ['format.js', 'trace.js', 'session.js', 'app.js'];
 const FORBIDDEN_MARKUP_APIS = /innerHTML|outerHTML|insertAdjacentHTML|document\.write|createContextualFragment|DOMParser|srcdoc|\beval\s*\(|new\s+Function\s*\(|setAttribute\(\s*['"]on/;
 
 test('no script of the page can parse HTML, and the page has no inline script', () => {
@@ -153,7 +153,7 @@ test('the page draws a reply with the formatter and loads its scripts in depende
   const app = fs.readFileSync(path.join(webDir, 'app.js'), 'utf8');
   assert.match(app, /SraFormat\.renderReply\(document, bubble, data\.reply\)/);
   const order = [...page.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) => m[1]);
-  assert.deepEqual(order, ['format.js', 'trace.js', 'app.js']);
+  assert.deepEqual(order, ['format.js', 'trace.js', 'session.js', 'app.js']);
 });
 
 test('the formatter is served next to the page', async (t) => {

@@ -301,12 +301,12 @@ test('chip: "Guardrail: blocked" when a policy blocked the reply; nothing at all
 
 test('the panel shows what a policy relied on, as the server recorded it, next to that policy', () => {
   const t = createTrace();
-  t.guardrail({ policy: 'no_unverified_discount_claim', outcome: 'pass', verified: [{ code: 'WELCOME10', basis: 'earlier-turn', turn: 2 }] });
+  t.guardrail({ policy: 'no_unverified_discount_claim', outcome: 'pass', verified: [{ code: 'WELCOME10', basis: 'earlier-turn', question: 2, excerpt: 'Is WELCOME10 valid?' }] });
   t.guardrail({ policy: 'no_unverified_stock_claim', outcome: 'pass' });
 
   const [row] = SraTrace.buildView(t.snapshot()).rows;
   assert.deepEqual(
     row.items.map((i) => i.text),
-    ['no unverified discount claim — WELCOME10: verified by checkDiscount on turn 2 of this conversation', 'no unverified stock claim']
+    ['no unverified discount claim — WELCOME10: verified by checkDiscount on question 2 ("Is WELCOME10 valid?")', 'no unverified stock claim']
   );
 });

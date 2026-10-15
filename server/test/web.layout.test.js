@@ -233,7 +233,7 @@ test('the stylesheet and the scripts are served with the page', async (t) => {
   await new Promise((resolve) => server.once('listening', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
-  for (const [file, marker] of [['styles.css', '--accent-text'], ['trace.js', 'renderTrace'], ['app.js', 'selectReply'], ['format.js', 'renderReply']]) {
+  for (const [file, marker] of [['styles.css', '--accent-text'], ['trace.js', 'renderTrace'], ['app.js', 'selectReply'], ['session.js', 'startSession'], ['format.js', 'renderReply']]) {
     const response = await fetch(`${base}/${file}`);
     assert.equal(response.status, 200, file);
     assert.match(await response.text(), new RegExp(marker), file);
