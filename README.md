@@ -10,6 +10,10 @@ second provider. All store data is invented. This is a portfolio project, not a 
 
 ## Run it locally
 
+**New to this? Follow the step-by-step [setup guide](./docs/SETUP.md)** (Windows first, with macOS and Linux notes):
+installing Node and Chroma, getting a free Gemini key, what to try in the app, troubleshooting, and a tour of the code.
+The short version is below.
+
 **Prerequisites:**
 
 - **Node.js 22.13 or newer** (the `engines` field in `server/package.json`; `node:sqlite` needs
