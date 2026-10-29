@@ -122,15 +122,21 @@ draft, deciding what is saved) is ordinary code that runs whether or not the mod
   the model, through one loop capped at three model calls per reply.
 - **Signals.** Six regex detectors look at the current message only. A detected signal adds one short line to
   that turn's system prompt, never triggers an action, and never tells the model to offer a discount.
-- **Guardrails.** Eight pure functions check the draft against which tools actually ran: no discount, stock,
-  order-status or policy claim without the matching tool, no refund promise, no disclosure of internals, no
-  manufactured urgency, no sensitive inference. A violation replaces the reply with a fixed fallback, and the
-  fallback (never the blocked draft) is what is saved. They are patterns over English text and check that the
-  right tool ran, not that the numbers match.
-- **Memory.** SQLite through `node:sqlite`; the last 20 messages of a session; only the user message and the
-  final reply are stored.
+- **Guardrails.** Eight functions of the finished reply check the draft against which tools were called this
+  turn: a discount, stock or order-status claim needs the matching tool, a shipping, return or refund timeframe
+  needs a knowledge-base search, and there is no refund promise, no disclosure of internals, no manufactured
+  urgency and no sensitive inference. Each looks for a narrow pattern in English text (for example, "policy" means a
+  number of days next to "ship", "return" or "refund", not any policy fact). A violation replaces the reply with a
+  fixed fallback, and the fallback (never the blocked draft) is what is saved. They check that the right tool was
+  called, not that the numbers in the reply match its result; only a statement about a code verified on an
+  *earlier* turn is compared detail by detail (see the limits below).
+- **Memory.** SQLite through `node:sqlite`; the last 20 messages of a session. The conversation stores only the
+  user message and the final reply; a separate table keeps each successful `checkDiscount` result, exactly as the
+  tool returned it, so the guardrails can recognise a code verified earlier in the same conversation.
 - **Failure handling.** A model error, timeout or rate limit that outlasts the retries, and an empty or blocked
-  reply, return a 502 and persist nothing. A Chroma outage is never reported as "we have no such policy".
+  reply, return a 502 and persist nothing. A Chroma outage comes back from the search tool as "unavailable", with
+  a message telling the model to say it could not reach store information and not to say the policy does not
+  exist. That is an instruction to the model: no code checks the final reply for it (see the limits below).
 
 ### The Operator view
 
@@ -254,6 +260,16 @@ PROJECT-1.md             the case-study write-up
   recorded data two claims of those kinds got through: "we currently sell all our items individually" (a store fact)
   and an offer to "help get this process started" from a photo, which the chat cannot receive or act on (a promised
   capability, found in a spot check). Planned for v1.1: claim verification against the knowledge base.
+- **A tool being called is what the guardrails check, not what it returned.** If `checkDiscount` (or `checkStock`,
+  `getOrderStatus`) was called on the current turn, the matching policy passes without reading what the reply says,
+  so a reply that names a different code, percentage, quantity or status than the one just looked up would pass.
+  Only a code verified on an earlier turn is compared with the reply in detail (code, percentage, who it is for,
+  validity, expiry date). The call is recorded even if the tool found nothing ("no such code"). Planned for v1.1:
+  compare the reply's values with the tool result on the same turn.
+- **An outage message is not enforced.** When the knowledge base cannot be reached, the tool tells the model to say
+  so and not to say the policy does not exist. Nothing checks the reply for that, and because the search was still
+  called, the shipping/return-timeframe policy would pass an invented timeframe. Planned for v1.1: a code check on
+  the reply when retrieval was unavailable.
 - Signal detection and guardrails are regex patterns over English text. They catch the shapes they were built
   for; every round of fresh real drafts found another.
 - The `demo` provider is not a model. It understands a fixed set of questions and answers anything

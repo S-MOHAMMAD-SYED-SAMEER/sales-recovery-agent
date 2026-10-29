@@ -191,8 +191,10 @@ sequenceDiagram
   (Gemini 3.x requires its `thought_signature` to survive that round trip).
 - **Retrieval**: chunks of at most 800 characters split on `##` headings with a 100-character overlap,
   embedded with `Xenova/all-MiniLM-L6-v2` in-process, top 3 by cosine similarity, anything below 0.35
-  dropped. "Nothing relevant found" and "the store could not be reached" are different results, so an
-  outage is never reported as "we have no such policy". A Chroma handle that has gone stale is refreshed
+  dropped. "Nothing relevant found" and "the store could not be reached" are different results: the
+  unreachable case comes back as `unavailable` with a message telling the model to say it could not reach store
+  information, not that the policy does not exist. That is an instruction to the model; no code checks the final
+  reply for it (see "What this does and does not prove"). A Chroma handle that has gone stale is refreshed
   and the call retried once; an empty collection is re-ingested on demand (after a failed attempt, not again for a minute).
 
 ## 3. Model calls that go wrong
@@ -250,7 +252,9 @@ flowchart LR
 
 ## 5. Guardrails
 
-Eight pure functions, each `({ reply, toolsUsed }) => reason | null`, in `src/guardrails/policies.js`.
+Eight functions of the finished reply, in `src/guardrails/policies.js`. Each receives `{ reply, toolsUsed,
+verifiedDiscounts, ... }` plus a `note` callback (used only to explain a pass in the trace) and returns `null` or a
+violation (`{ reason, rule, matched, clause }`, or just a reason string).
 
 | Policy | Blocks |
 |---|---|
@@ -290,8 +294,15 @@ flowchart TD
   the next breath ("I can't promise it will last, but use SAVE20 for 20% off" is still blocked).
 - **A code verified earlier in the same conversation.** The discount policy used to trust `checkDiscount` from the current turn only, so a true reply that named a code checked one turn before ("the only code I can verify is WELCOME10, which gives 10% off for first-time customers") was blocked. `chat.js` now keeps each successful `checkDiscount` result, exactly as the tool returned it, against its conversation (`verified_discounts`), and passes the earlier ones to the policy. A statement about such a code passes only if everything it claims matches that result: the code, any percentage, any date, an eligibility phrase that is in the tool's description, and whether it is valid. A money amount never matches (the tool returns percentages). A code never verified, a claim that names no code, any mismatch, and a code verified only in another conversation still block. The records come from the tool executor, never from model text or the customer's message.
 - **Scope.** Guardrails enforce discount, stock, order-status and promotion claims in code. Other product-fact claims (how items are sold, materials, dimensions and so on) rely on retrieval grounding, not on a code check. Planned for v1.1: claim verification against the knowledge base.
-- **What this does and does not prove.** The check is that the *right tool ran*, not that the reply's number
-  matches the tool's. It is a set of patterns over English text: it catches the shapes it was built for, and
+- **What this does and does not prove.** The check is that the *right tool was called*, not that the reply's number
+  matches the tool's. The only place a reply is compared with a tool result is the earlier-turn path above. If
+  `checkDiscount` ran on *this* turn, `no_unverified_discount_claim` returns "pass" at once and does not read the
+  reply, so a different code or percentage than the one just looked up would pass; the same holds for
+  `checkStock` and `getOrderStatus`. A tool call counts even when the tool found nothing. The "policy" check only
+  looks for a number of days next to "ship", "return" or "refund", and the order-status check only for "tracking
+  number" or a status word next to an order number. The knowledge-base outage wording (above) is not checked in
+  code either: the search was still called, so an invented timeframe would pass. Planned for v1.1: compare the
+  reply's values with the tool result on the same turn, and check the reply when retrieval was unavailable. It is a set of patterns over English text: it catches the shapes it was built for, and
   every round of fresh real drafts has found another shape. That is why the model is also told the rules in
   the prompt, and why a claim of a given category needs a tool in the first place.
 
@@ -311,10 +322,11 @@ Every real call records tokens, latency, attempts and finish reason. The tool lo
 
 ## 7. Memory and persistence
 
-SQLite through Node's built-in `node:sqlite`, two tables (`conversations`, `messages`), no native build.
+SQLite through Node's built-in `node:sqlite`, three tables (`conversations`, `messages` and `verified_discounts`), no native build.
 The store keeps its database alive for its own lifetime (on Node 22 a database that only its prepared
-statements referred to could be garbage-collected mid-use). Only the plain user message and the final reply
-are stored. On a host without a persistent disk the file is ephemeral; that is a documented limit, not a bug.
+statements referred to could be garbage-collected mid-use). `messages` holds only the plain user message and the
+final reply; `verified_discounts` holds each successful `checkDiscount` result exactly as the tool returned it, with
+the number of the customer's question it ran on and a short excerpt of that question. On a host without a persistent disk the file is ephemeral; that is a documented limit, not a bug.
 
 ## 8. The evaluation harness
 
@@ -342,6 +354,7 @@ failed case with no checks (it used to be graded on the text "[HTTP 502]", which
 ## 10. Not built
 
 No code check for product-fact claims beyond discount, stock, order status and promotions (v1.1: verify claims
-against the knowledge base). No authentication, no real store or CRM, no payment handling, no human handoff (the fallback only says
+against the knowledge base). No same-turn comparison of a reply's values with a tool result (v1.1). No code check
+on the reply when the knowledge base was unavailable (v1.1). No authentication, no real store or CRM, no payment handling, no human handoff (the fallback only says
 support can help), no streaming of the steps (the page shows one "Working…" line until the reply arrives; SSE is planned for v1.1), no rate limiting per user (it is per IP, and behind a proxy all visitors
 share one bucket), no multi-language support. Hosting your own copy is described in [HOSTING.md](./HOSTING.md).
