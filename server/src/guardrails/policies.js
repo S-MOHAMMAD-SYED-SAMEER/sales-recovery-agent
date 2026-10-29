@@ -2,9 +2,10 @@ import { checkAgainstVerified, codesIn } from './verifiedDiscounts.js';
 
 // Explicit, individually testable guardrail policies over the assistant's
 // final reply text. Each policy is a pure function:
-//   (context: { reply, toolsUsed, verifiedDiscounts }) -> violation string | null
+//   (context: { reply, toolsUsed, verifiedDiscounts, note, ... }) -> null | a reason string | { reason, rule, matched, clause }
 // `verifiedDiscounts` are the checkDiscount results from EARLIER turns of this
-// conversation (see verifiedDiscounts.js); every other policy ignores it.
+// conversation (see verifiedDiscounts.js); every other policy ignores it. `note` is a callback a
+// policy may use to say why it let something through (it feeds the trace and never changes the decision).
 //
 // Deliberately implemented as application logic (regex/keyword checks
 // against what actually happened this turn), not just prompt instructions —

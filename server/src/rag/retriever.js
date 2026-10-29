@@ -1,10 +1,10 @@
 const DEFAULT_TOP_K = 3;
 // Cosine-similarity threshold below which a match is treated as "not
 // actually relevant" rather than forced into the model's context anyway.
-// Tuned against all-MiniLM-L6-v2: on-topic KB matches for this dataset
+// Set with all-MiniLM-L6-v2 in mind: on-topic KB matches for this dataset
 // score ~0.5-0.8; off-topic queries (e.g. asking about something the KB
-// doesn't cover at all) score well below this. See README for how this was
-// checked against real queries.
+// doesn't cover at all) score well below this. The value was chosen by hand from those scores; no
+// separate tuning experiment is recorded in the repository or its docs.
 const DEFAULT_MIN_SCORE = 0.35;
 
 // Factory so tests can retrieve against a throwaway vector store + a fake,

@@ -31,9 +31,11 @@ An AI support agent that:
 4. **Notices a small set of sales-relevant signals** in what the customer says (hesitation, a
    shipping worry, a price concern) and responds a little more proactively when it sees one —
    without ever inventing a discount or promise to do it.
-5. **Is constrained, not just prompted, to avoid the failure mode that matters most for a support
-   bot**: stating something false about an order, a price, a policy, or making a promise (a refund)
-   it has no way to actually fulfill.
+5. **Is checked in code, not only prompted, against the failure mode that matters most for a support
+   bot**: stating an order status, a price or discount, stock, or a shipping or return timeframe that no tool
+   looked up, or making a promise (a refund) it has no way to fulfill. The checks are patterns plus whether the
+   right tool was called; they do not verify that the values in the reply match the tool's result (see "Known
+   limitations").
 6. **Shows its work.** Every reply carries a trace of what the server actually did on that turn (the signal that
    fired, each model call with its tokens, each tool call, the knowledge-base files and chunks it returned, and one
    line per guardrail policy), recorded as the turn runs rather than reconstructed afterwards. An Operator view in
@@ -61,7 +63,7 @@ flowchart TD
     I -->|unsafe| K[Safe fallback reply]
     K --> J
     J --> L[Persist user + final reply<br/>SQLite]
-    L --> M[Response to customer<br/>reply + toolsUsed + signals]
+    L --> M[Response to customer<br/>reply + toolsUsed + signals + trace]
 ```
 
 **Modules** (`server/src/`), each independently testable and deliberately decoupled from the others:
@@ -181,7 +183,16 @@ Stated plainly, not glossed over:
 - **Signal detection is keyword/regex-based**, English-only, and will miss indirect phrasing.
 - **Guardrails are pattern-based**, not a fact-checker — they confirm the right category of tool ran
   before a claim of that type is allowed through, not that every value in the reply is correct, and
-  they can over-block, and they check refund promises but not other promised capabilities.
+  they can over-block, and they check refund promises but not other promised capabilities. The "policy" check
+  only looks for a number of days next to "ship", "return" or "refund".
+- **A tool being called is what is checked, not what it returned.** If `checkDiscount`, `checkStock` or
+  `getOrderStatus` was called on the current turn, its policy passes without reading the reply, so a different code,
+  percentage, quantity or status than the one just looked up would pass; the call counts even when the tool found
+  nothing. Only a code verified on an earlier turn is compared in detail. Planned for v1.1.
+- **The knowledge-base outage wording is an instruction, not a check.** The search tool tells the model to say it
+  could not reach store information, and not that the policy does not exist; no code checks the reply for that, and
+  since the search was still called, an invented shipping or return timeframe would pass the policy check.
+  Planned for v1.1.
 - **The evaluation dataset is a 21-case smoke test**, not statistically powered coverage of real
   customer phrasing.
 - **Model providers.** Gemini (free tier, `gemini-3.5-flash-lite`) is the default and has been run;
@@ -196,6 +207,8 @@ Gated by real need, not built speculatively:
 - Claim verification against the knowledge base: the code checks discount, stock, order-status and promotion
   claims, while other product-fact claims (two violations still get through: "we currently sell all our items
   individually", and an offer to start a claim from a photo the chat cannot receive) rely on retrieval grounding. Planned for v1.1.
+- Compare the values in a reply with the tool result on the same turn (today only a code verified on an earlier
+  turn is compared in detail), and add a code check on the reply when the knowledge base was unavailable.
 - Run the Anthropic adapter once credits are available.
 - Replace the mock business tools with a real store API (Shopify or similar), with authentication,
   once there is an actual store to connect to.
